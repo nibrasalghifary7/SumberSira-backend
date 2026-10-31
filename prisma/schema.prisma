@@ -33,9 +33,18 @@ model AdminSession {
 }
 
 model Ride {
-  id       String  @id @default(cuid())
+  id       String  @id          // slug, mis. "ban-kecil"
   name     String
-  category String
+  category String               // "Sewa Alat" atau "Wahana"
   price    Int
+  unit     String  @default("")
+  icon     String
   active   Boolean @default(true)
+}
+
+model TimeSlot {
+  id        String  @id         // mis. "08-10"
+  label     String
+  timeRange String               // mis. "08.00 - 10.00"
+  busy      Boolean @default(false)
 }
