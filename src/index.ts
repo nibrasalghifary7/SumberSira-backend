@@ -4,6 +4,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import { db } from "./lib/db.js";
 import { authRouter } from "./routes/auth.js";
+import { adminRidesRouter, ridesRouter, slotsRouter } from "./routes/rides.js";
 
 const app = express();
 
@@ -13,6 +14,9 @@ app.use(cors({ origin: process.env.ADMIN_ORIGIN, credentials: true }));
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 app.use("/auth", authRouter);
+app.use("/rides", ridesRouter);
+app.use("/time-slots", slotsRouter);
+app.use("/admin/rides", adminRidesRouter);
 app.get("/health/db", async (_req, res) => {
   const rides = await db.ride.count();
   res.json({ ok: true, rides });
