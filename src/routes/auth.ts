@@ -52,8 +52,9 @@ authRouter.post("/logout", requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
+// BERUBAH: sekarang ikut mengirim sessionId
 authRouter.get("/me", requireAuth, (_req, res) => {
-  res.json(res.locals.user);
+  res.json({ ...res.locals.user, sessionId: res.locals.sessionId });
 });
 
 // Daftar sesi milik akun yang sedang login
@@ -64,6 +65,14 @@ authRouter.get("/sessions", requireAuth, async (_req, res) => {
     select: { id: true, userAgent: true, createdAt: true, expiresAt: true },
   });
   res.json(sessions.map((s) => ({ ...s, current: s.id === res.locals.sessionId })));
+});
+
+// BARU: keluar dari semua perangkat lain; sesi yang sedang dipakai tetap aktif
+authRouter.post("/sessions/revoke-others", requireAuth, async (_req, res) => {
+  const { count } = await db.adminSession.deleteMany({
+    where: { userId: res.locals.user.id, id: { not: res.locals.sessionId } },
+  });
+  res.json({ ok: true, count });
 });
 
 // Cabut satu sesi. Filter userId wajib, supaya tidak bisa mencabut sesi orang lain.
