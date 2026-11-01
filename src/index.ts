@@ -10,9 +10,22 @@ const app = express();
 
 app.use(express.json());
 app.use(cookieParser());
-app.use(cors({ origin: process.env.ADMIN_ORIGIN, credentials: true }));
-
+// Di mode pengembangan, semua localhost boleh (Flutter web memakai port acak).
+// Di produksi, hanya alamat web admin.
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true); // Postman, Flutter mobile, server-ke-server
+      const dev = process.env.NODE_ENV !== "production" && /^http:\/\/localhost:\d+$/.test(origin);
+      cb(null, dev || origin === process.env.ADMIN_ORIGIN);
+    },
+    credentials: true,
+  }),
+);
 app.get("/health", (_req, res) => res.json({ ok: true }));
+app.get("/", (_req, res) => {
+  res.json({ name: "SumberSira API", status: "ok" });
+});
 app.use("/auth", authRouter);
 app.use("/rides", ridesRouter);
 app.use("/time-slots", slotsRouter);
