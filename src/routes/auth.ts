@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "../lib/db.js";
 import { verifyPassword } from "../lib/password.js";
 import { COOKIE, newToken, sha256 } from "../lib/session.js";
-import { requireAuth } from "../middleware/auth.js";
+import { forgetSession, forgetToken, forgetUserExcept, requireAuth } from "../middleware/auth.js";
 
 export const authRouter = Router();
 
@@ -47,7 +47,9 @@ authRouter.post("/login", async (req, res) => {
 });
 
 authRouter.post("/logout", requireAuth, async (req, res) => {
-  await db.adminSession.deleteMany({ where: { tokenHash: sha256(req.cookies[COOKIE]) } });
+  const tokenHash = sha256(req.cookies[COOKIE]);
+  await db.adminSession.deleteMany({ where: { tokenHash } });
+  forgetToken(tokenHash);
   res.clearCookie(COOKIE);
   res.json({ ok: true });
 });
@@ -72,14 +74,17 @@ authRouter.post("/sessions/revoke-others", requireAuth, async (_req, res) => {
   const { count } = await db.adminSession.deleteMany({
     where: { userId: res.locals.user.id, id: { not: res.locals.sessionId } },
   });
+  forgetUserExcept(res.locals.user.id, res.locals.sessionId);
   res.json({ ok: true, count });
 });
 
 // Cabut satu sesi. Filter userId wajib, supaya tidak bisa mencabut sesi orang lain.
 authRouter.delete("/sessions/:id", requireAuth, async (req, res) => {
+  const id = String(req.params.id);
   const { count } = await db.adminSession.deleteMany({
-    where: { id: req.params.id, userId: res.locals.user.id },
+    where: { id, userId: res.locals.user.id },
   });
   if (count === 0) return res.status(404).json({ error: "NOT_FOUND" });
+  forgetSession(id);
   res.json({ ok: true });
 });
