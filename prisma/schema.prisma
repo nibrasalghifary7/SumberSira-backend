@@ -18,6 +18,7 @@ model AdminUser {
   name         String
   passwordHash String
   role         Role
+  active       Boolean        @default(true) // P11
   createdAt    DateTime       @default(now())
   sessions     AdminSession[]
 }
@@ -47,4 +48,189 @@ model TimeSlot {
   label     String
   timeRange String               // mis. "08.00 - 10.00"
   busy      Boolean @default(false)
+}
+
+
+// P1
+model Counter {
+  key   String @id
+  value Int
+}
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+
+// P2
+enum Parking {
+  none
+  motor
+  mobil
+  bus
+}
+
+enum PaymentMethod {
+  qris
+  cash
+}
+
+enum PaymentStatus {
+  pending
+  paid
+  failed
+  expired
+  cancelled
+}
+
+enum PaymentProvider {
+  simulation
+  midtrans
+  manual
+}
+
+enum TicketStatus {
+  waiting
+  inside
+  out
+}
+
+model Ticket {
+  id            String        @id @default(cuid())
+  code          String        @unique            // TK-1001, TK-1002, ...
+  name          String
+  whatsapp      String                           // sudah dinormalisasi
+  adults        Int
+  kids          Int           @default(0)
+  parking       Parking       @default(none)
+  arrival       String                           // mis. "08.00 - 10.00"
+  visitDate     String                           // "YYYY-MM-DD" WIB
+  amount        Int
+  paymentMethod PaymentMethod
+  paymentStatus PaymentStatus @default(pending)
+  status        TicketStatus  @default(waiting)
+  checkInAt     DateTime?
+  checkOutAt    DateTime?
+  isDemo        Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+  payments      Payment[]
+  @@index([whatsapp])
+  @@index([visitDate, status])
+}
+
+model Payment {
+  id                    String          @id @default(cuid())
+  ticketId              String?
+  ticket                Ticket?         @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  bookingId             String?
+  booking               Booking?        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  method                PaymentMethod
+  provider              PaymentProvider
+  status                PaymentStatus   @default(pending)
+  amount                Int
+  providerOrderId       String?         @unique
+  providerTransactionId String?
+  qrString              String?
+  qrUrl                 String?
+  expiresAt             DateTime?
+  paidAt                DateTime?
+  lastPayload           Json?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  @@index([status])
+}
+
+
+// P3
+model Booking {
+  id            String        @id @default(cuid())
+  code          String        @unique            // SS-20261112-001
+  name          String
+  whatsapp      String
+  slot          String                           // "08-09"
+  visitDate     String
+  amount        Int
+  paymentStatus PaymentStatus @default(pending)
+  createdAt     DateTime      @default(now())
+  lines         BookingLine[]
+  payments      Payment[]
+  @@index([whatsapp])
+  @@index([visitDate])
+}
+
+model BookingLine {
+  id        String  @id @default(cuid())
+  bookingId String
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  rideId    String                                // sengaja TANPA relasi ke Ride (riwayat tetap utuh jika wahana dihapus)
+  name      String                                // label saat dipesan, mis. "ATV (15 menit)"
+  qty       Int
+  unitPrice Int                                   // harga saat dipesan
+}
+
+
+// P6
+model Review {
+  id        String   @id @default(cuid())
+  name      String
+  stars     Int
+  text      String
+  createdAt DateTime @default(now())
+}
+
+
+// P7
+model Faq {
+  id        String   @id @default(cuid())
+  keys      String[]
+  answer    String
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+}
+
+model UnansweredQuestion {
+  id        String   @id @default(cuid())
+  question  String
+  createdAt DateTime @default(now())
+}
+
+
+// P8
+enum PhotoStatus {
+  pending
+  approved
+  rejected
+}
+
+model GalleryPhoto {
+  id         String      @id @default(cuid())
+  url        String
+  storageKey String
+  title      String
+  owner      String
+  ai         Boolean     @default(false)
+  status     PhotoStatus @default(pending)
+  createdAt  DateTime    @default(now())
+  reviewedAt DateTime?
+}
+
+
+// P9
+enum JobStatus {
+  processing
+  done
+  failed
+}
+
+model AiPhotoJob {
+  id          String    @id @default(cuid())
+  originalUrl String
+  originalKey String
+  resultUrl   String?
+  resultKey   String?
+  status      JobStatus @default(processing)
+  error       String?
+  createdAt   DateTime  @default(now())
 }
