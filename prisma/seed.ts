@@ -19,18 +19,6 @@ const SLOTS = [
   { id: "14-16", label: "14-16", timeRange: "14.00 - 16.00", busy: true },
 ];
 
-// FAQ awal (jawaban cepat tanpa AI). Hanya diisi bila tabel masih kosong, supaya FAQ yang diubah pengelola tidak tertimpa.
-const FAQS = [
-  { question: "Jam buka Sumber Sira?", answer: "Weekday buka 08.00-16.00, weekend 08.00-17.00 ya!", keywords: "jam,buka,tutup,operasional,weekend,weekday" },
-  { question: "Berapa harga tiket masuk?", answer: "Tiket masuk Rp5.000 per orang untuk usia 3 tahun ke atas. Balita gratis.", keywords: "harga,tiket,tarif,htm,balita" },
-  { question: "Bagaimana cara membayar tiket?", answer: "Tiket masuk bisa QRIS atau tunai di loket. Sewa dan wahana dibayar lewat QRIS.", keywords: "bayar,pembayaran,qris,tunai,cash" },
-  { question: "Fasilitas apa saja yang ada?", answer: "Ada kolam mata air, kolam anak, gazebo, dan musholla.", keywords: "fasilitas,gazebo,musholla,kolam" },
-  { question: "Berapa biaya parkir?", answer: "Parkir motor Rp3.000, mobil Rp10.000, bus Rp20.000.", keywords: "parkir,motor,mobil,bus" },
-  { question: "Bagaimana cara sewa ATV atau booking wahana?", answer: "Buka Tiket & Booking, pilih jam, tambah item, lalu tekan Lanjut Booking.", keywords: "atv,sewa,booking,wahana" },
-  { question: "Bagaimana melihat riwayat tiket saya?", answer: "Buka Tiket & Booking lalu cari dengan nomor WhatsApp yang dipakai saat membeli. Tidak perlu login.", keywords: "riwayat,whatsapp,tiket saya,hilang" },
-  { question: "Kapan waktu yang sepi dikunjungi?", answer: "Lihat grafik keramaian di Beranda. Biasanya paling sepi pukul 08.00-09.00 atau setelah 15.00.", keywords: "sepi,ramai,penuh,keramaian" },
-];
-
 async function main() {
   // Akun demo: samakan email dan password dengan yang tertulis di README frontend
   const accounts = [
@@ -53,10 +41,6 @@ async function main() {
 
   for (const s of SLOTS) {
     await db.timeSlot.upsert({ where: { id: s.id }, update: s, create: s });
-  }
-
-  if ((await db.faq.count()) === 0) {
-    await db.faq.createMany({ data: FAQS });
   }
 
   console.log("Seed selesai.");
