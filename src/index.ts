@@ -1,39 +1,56 @@
 import "dotenv/config";
-import express from "express";
-import cors from "cors";
-import cookieParser from "cookie-parser";
+import { app } from "./app.js";
+import { config } from "./config.js";
 import { db } from "./lib/db.js";
-import { authRouter } from "./routes/auth.js";
-import { adminRidesRouter, ridesRouter, slotsRouter } from "./routes/rides.js";
+import { applyPaymentStatus, syncPayment } from "./payments/service.js";
+import { sweepExpiredSessions } from "./lib/sweep.js";
 
-const app = express();
+const port = config.PORT;
+const server = app.listen(port, () => console.log(`API jalan di http://localhost:${port}`));
 
-app.use(express.json());
-app.use(cookieParser());
-// Di mode pengembangan, semua localhost boleh (Flutter web memakai port acak).
-// Di produksi, hanya alamat web admin.
-app.use(
-  cors({
-    origin: (origin, cb) => {
-      if (!origin) return cb(null, true); // Postman, Flutter mobile, server-ke-server
-      const dev = process.env.NODE_ENV !== "production" && /^http:\/\/localhost:\d+$/.test(origin);
-      cb(null, dev || origin === process.env.ADMIN_ORIGIN);
-    },
-    credentials: true,
-  }),
-);
-app.get("/health", (_req, res) => res.json({ ok: true }));
-app.get("/", (_req, res) => {
-  res.json({ name: "SumberSira API", status: "ok" });
-});
-app.use("/auth", authRouter);
-app.use("/rides", ridesRouter);
-app.use("/time-slots", slotsRouter);
-app.use("/admin/rides", adminRidesRouter);
-app.get("/health/db", async (_req, res) => {
-  const rides = await db.ride.count();
-  res.json({ ok: true, rides });
-});
+// Penyapu berkala setiap 5 menit: ambil pembayaran QRIS pending yang expiresAt sudah lewat > 2 menit
+const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+const sweepInterval = setInterval(async () => {
+  try {
+    const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
+    const expiredPendingPayments = await db.payment.findMany({
+      where: {
+        method: "qris",
+        status: "pending",
+        expiresAt: { lt: twoMinutesAgo },
+      },
+      take: 50,
+    });
 
-const port = Number(process.env.PORT ?? 4000);
-app.listen(port, () => console.log(`API jalan di http://localhost:${port}`));
+    for (const payment of expiredPendingPayments) {
+      try {
+        const synced = await syncPayment(payment.id);
+        if (synced && synced.status === "pending") {
+          await applyPaymentStatus(payment.id, "expired", { swept: true, sweptAt: new Date().toISOString() });
+        }
+      } catch (err) {
+        console.error(`Gagal menyapu payment ${payment.id}:`, err);
+      }
+    }
+  } catch (err) {
+    console.error("Gagal menjalankan penyapu berkala pembayaran:", err);
+  }
+
+  // Penyapu sesi admin kadaluarsa (housekeeping; requireAuth tetap memeriksa expiresAt)
+  try {
+    const count = await sweepExpiredSessions();
+    if (count > 0) console.log(`Menyapu ${count} sesi admin kadaluarsa.`);
+  } catch (err) {
+    console.error("Gagal menyapu sesi admin kadaluarsa:", err);
+  }
+}, SWEEP_INTERVAL_MS);
+
+function cleanup() {
+  clearInterval(sweepInterval);
+  server.close(() => {
+    db.$disconnect().finally(() => process.exit(0));
+  });
+}
+
+process.on("SIGTERM", cleanup);
+process.on("SIGINT", cleanup);
