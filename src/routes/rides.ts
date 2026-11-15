@@ -110,21 +110,23 @@ adminRidesRouter.patch("/:id", requireRole("admin"), async (req, res) => {
     return res.status(400).json({ error: "VALIDATION" });
   }
 
-  const current = await db.ride.findUnique({ where: { id: req.params.id } });
+  const id = req.params.id as string;
+  const current = await db.ride.findUnique({ where: { id } });
   if (!current) return res.status(404).json({ error: "NOT_FOUND" });
 
   const { status, ...rest } = parsed.data;
   const ride = await db.ride.update({
-    where: { id: req.params.id },
+    where: { id },
     data: { ...rest, ...(status !== undefined ? { active: status === "Aktif" } : {}) },
   });
   res.json(toDto(ride));
 });
 
 adminRidesRouter.delete("/:id", requireRole("admin"), async (req, res) => {
-  const current = await db.ride.findUnique({ where: { id: req.params.id } });
+  const id = req.params.id as string;
+  const current = await db.ride.findUnique({ where: { id } });
   if (!current) return res.status(404).json({ error: "NOT_FOUND" });
 
-  await db.ride.delete({ where: { id: req.params.id } });
+  await db.ride.delete({ where: { id } });
   res.json({ ok: true });
 });

@@ -11,7 +11,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     include: { user: true },
   });
 
-  if (!session || session.expiresAt < new Date()) {
+  if (!session || session.expiresAt < new Date() || !session.user.active) {
     return res.status(401).json({ error: "UNAUTHENTICATED" });
   }
 
