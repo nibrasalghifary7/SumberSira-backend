@@ -40,26 +40,51 @@ Dokumentasi lengkap endpoint (body, contoh respons, kode galat, contoh curl/Powe
 
 > **Penting:** pasang Prisma dengan versi terkunci (`prisma@7` dan `@prisma/client@7`). Menjalankan `npm install prisma` tanpa nomor versi bisa memasang Prisma 8 (rilis kandidat), yang tidak punya perintah `generate` dan `migrate dev`, sehingga proyek ini tidak bisa dijalankan.
 
-## Variabel environment
+## Konfigurasi
 
-Salin `.env.example` menjadi `.env`, lalu isi. Semua variabel punya nilai bawaan kecuali `DATABASE_URL`:
+Salin `.env.example` menjadi `.env`, lalu isi. Semua variabel punya nilai bawaan kecuali
+`DATABASE_URL` (dan beberapa variabel menjadi wajib tergantung mode yang dipakai).
 
-| Variabel | Bawaan | Fungsi |
-|---|---|---|
-| `DATABASE_URL` | (wajib) | Connection string PostgreSQL/Neon. Pakai versi **direct** (tanpa `-pooler` di alamat host) untuk migrasi. |
-| `PORT` | `4000` | Port server |
-| `ADMIN_ORIGIN` | `http://localhost:3000` | Alamat web admin yang diizinkan CORS |
-| `NODE_ENV` | `development` | `production` mengubah perilaku CORS, cookie, dan simulate-pay (lihat bawah) |
-| `TRUST_PROXY` | `0` | Jumlah proxy di depan server (di Vercel/Railway/Render biasanya `1`) agar rate limit membaca IP asli |
-| `PUBLIC_BASE_URL` | `""` | URL publik server, dipakai provider pembayaran untuk membuat QR Midtrans |
-| `PAYMENT_MODE` | `simulation` | `simulation` (QRIS palsu, cocok untuk pengembangan) atau `midtrans` |
-| `MIDTRANS_ENV` | `sandbox` | `sandbox` atau `production` (URL API Midtrans) |
-| `MIDTRANS_SERVER_KEY` | `""` | Wajib diisi bila `PAYMENT_MODE=midtrans` |
-| `MIDTRANS_CLIENT_KEY` | `""` | Dipakai web admin untuk Snap/QR |
-| `STORAGE_DRIVER` | `local` | `local` (folder `uploads/`, cocok pengembangan) atau `vercel-blob` |
-| `BLOB_READ_WRITE_TOKEN` | `""` | Wajib diisi bila `STORAGE_DRIVER=vercel-blob` |
+| Variabel | Wajib? | Contoh | Penjelasan |
+|---|---|---|---|
+| `DATABASE_URL` | **Wajib** | `postgresql://user:pass@host/neondb?sslmode=require` | Connection string PostgreSQL/Neon. Pakai versi **direct** (tanpa `-pooler` di host) untuk migrasi. |
+| `PORT` | Tidak | `4000` | Port HTTP server. Bawaan `4000`. |
+| `ADMIN_ORIGIN` | Tidak | `https://admin.sumbersira.id,https://app.sumbersira.id` | Origin yang diizinkan CORS. **Boleh daftar dipisah koma**; spasi dan garis miring di akhir dinormalisasi. Bawaan `http://localhost:3000`. Di luar daftar ini CORS ditolak (tanpa error 500). |
+| `NODE_ENV` | Tidak | `production` | `development`, `test`, atau `production`. Bawaan `development`. Produksi mematikan CORS localhost, mengaktifkan cookie `Secure`, dan mematikan `simulate-pay`. |
+| `TRUST_PROXY` | Tidak | `1` | Jumlah reverse proxy di depan server (Vercel/Railway/Render/NGINX biasanya `1`) agar rate limit membaca IP asli. Bawaan `0`. |
+| `PUBLIC_BASE_URL` | **Wajib di produksi** bila `STORAGE_DRIVER=local` | `https://api.sumbersira.id` | URL publik backend ini, **dipakai untuk dua hal**: (1) membentuk URL foto galeri/AI Photo pada penyimpanan lokal, dan (2) URL webhook Midtrans (`X-Override-Notification`). Harus URL `http://`/`https://` valid; garis miring di akhir otomatis dibuang. Di `development` boleh kosong (memakai `http://localhost:PORT`). |
+| `PAYMENT_MODE` | Tidak | `simulation` | `simulation` (bawaan; QRIS palsu + endpoint uji bayar) atau `midtrans` (QRIS sungguhan). |
+| `MIDTRANS_ENV` | Tidak | `sandbox` | `sandbox` (default) atau `production`; menentukan URL API Midtrans. |
+| `MIDTRANS_SERVER_KEY` | **Wajib** bila `PAYMENT_MODE=midtrans` | `SB-Mid-server-...` | Kunci server Midtrans untuk charge/status. **Rahasia.** |
+| `MIDTRANS_CLIENT_KEY` | Tidak | `SB-Mid-client-...` | Kunci client Midtrans, dipakai web admin bila memakai Snap/QR. |
+| `STORAGE_DRIVER` | Tidak | `local` | `local` (folder `uploads/`, cocok pengembangan) atau `vercel-blob` (produksi). |
+| `BLOB_READ_WRITE_TOKEN` | **Wajib** bila `STORAGE_DRIVER=vercel-blob` | `vercel_blob_rw_...` | Token Vercel Blob. **Rahasia.** |
 
-File `.env` berisi password database dan kunci rahasia. **Jangan pernah di-commit.**
+Catatan penting:
+
+- **Jangan pernah commit `.env`** atau menyalin kunci asli ke README, dokumen, tiket, atau chat.
+  File `.env` sudah masuk `.gitignore`; gunakan `.env.example` untuk berbagi contoh.
+- `PUBLIC_BASE_URL` bukan sekadar alamat foto: nilai yang sama dipakai sebagai dasar URL
+  notifikasi Midtrans. Bila kosong di produksi saat penyimpanan lokal, server menolak start.
+- Dengan `ADMIN_ORIGIN` berisi daftar, cukup satu variabel untuk web admin dan web pengunjung.
+
+### Contoh konfigurasi Midtrans sandbox
+
+Isi kunci asli dari dashboard Midtrans (Sandbox → Settings → Access Keys). Contoh di bawah
+sengaja hanya berisi placeholder:
+
+```env
+NODE_ENV=development
+PUBLIC_BASE_URL="https://domain-publik-anda.example"
+PAYMENT_MODE=midtrans
+MIDTRANS_ENV=sandbox
+MIDTRANS_SERVER_KEY="SB-Mid-server-xxxxxxxxxxxxxxxx"
+MIDTRANS_CLIENT_KEY="SB-Mid-client-xxxxxxxxxxxxxxxx"
+```
+
+Daftarkan URL webhook berikut di dashboard Midtrans:
+`https://domain-publik-anda.example/payments/midtrans/notification`
+(lihat `docs/midtrans-setup.md` untuk langkah lengkap).
 
 ### Mode pembayaran
 
@@ -130,10 +155,10 @@ Dibuat oleh `npm run seed`, **hanya untuk pengembangan**. Ganti dengan password 
 
 ## Smoke test
 
-Skrip uji end-to-end ada di `scripts/smoke/`, satu per fase pengembangan (`p0.ts` sampai `p12.ts`). Semua skrip menyalakan servernya sendiri di port acak, memakai data berawalan `[SMOKE]`, dan **membersihkan data uji** di akhir, jadi aman dijalankan pada database tim.
+Skrip uji end-to-end ada di `scripts/smoke/`, satu per fase pengembangan ditambah pemeriksaan konfigurasi (`p0.ts` sampai `p14.ts`). Semua skrip menyalakan servernya sendiri di port acak, memakai data berawalan `[SMOKE]`, dan **membersihkan data uji** di akhir, jadi aman dijalankan pada database tim.
 
 ```
-npx tsx scripts/smoke/all.ts     # seluruh fase P0-P12 berurutan, berhenti di kegagalan pertama
+npx tsx scripts/smoke/all.ts     # seluruh fase P0-P14 berurutan, berhenti di kegagalan pertama
 npx tsx scripts/smoke/p8.ts      # satu fase saja
 ```
 
@@ -195,8 +220,8 @@ Variabel environment yang **wajib diisi di server produksi**:
 |---|---|
 | `NODE_ENV` | `production` (wajib: menonaktifkan CORS localhost, mengaktifkan cookie `Secure`, mematikan `simulate-pay`) |
 | `DATABASE_URL` | Connection string database produksi (pooler boleh, tapi migrasi pakai versi direct) |
-| `ADMIN_ORIGIN` | URL web admin yang sudah dideploy, mis. `https://admin.sumbersira.id` |
-| `PUBLIC_BASE_URL` | URL publik API ini, mis. `https://api.sumbersira.id` |
+| `ADMIN_ORIGIN` | Origin web admin/pengunjung yang sudah dideploy, boleh daftar dipisah koma, mis. `https://admin.sumbersira.id,https://app.sumbersira.id` |
+| `PUBLIC_BASE_URL` | URL publik API ini, mis. `https://api.sumbersira.id` (dipakai URL foto **dan** URL webhook Midtrans) |
 | `TRUST_PROXY` | `1` bila di belakang proxy (Vercel/Railway/Render/NGINX) |
 | `PAYMENT_MODE` | `midtrans` untuk pembayaran sungguhan |
 | `MIDTRANS_SERVER_KEY` | Kunci server Midtrans (`MIDTRANS_ENV=production` untuk live) |
