@@ -31,6 +31,31 @@ export function errorHandler(
     });
   }
 
+  // Galat dari body-parser / klien: body bukan JSON valid ("entity.parse.failed",
+  // termasuk body "null" karena parser memakai mode strict), body terlalu besar,
+  // atau galat lain yang membawa status 4xx. Ini galat pemanggil (4xx), bukan
+  // galat internal, jadi tidak di-log sebagai Internal Server Error.
+  const clientError = err as { type?: unknown; status?: unknown; statusCode?: unknown } | null;
+  const type = typeof clientError?.type === "string" ? clientError.type : undefined;
+  const status =
+    typeof clientError?.status === "number"
+      ? clientError.status
+      : typeof clientError?.statusCode === "number"
+        ? clientError.statusCode
+        : undefined;
+
+  if (type === "entity.parse.failed") {
+    return res.status(400).json({ error: "VALIDATION" });
+  }
+
+  if (type === "entity.too.large") {
+    return res.status(413).json({ error: "VALIDATION" });
+  }
+
+  if (status !== undefined && status >= 400 && status < 500) {
+    return res.status(status).json({ error: "VALIDATION" });
+  }
+
   // Log galat internal di server
   console.error("Internal Server Error:", err);
 
