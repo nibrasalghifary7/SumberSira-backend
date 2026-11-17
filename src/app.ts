@@ -34,13 +34,14 @@ app.use(express.json());
 app.use(cookieParser());
 
 // Di mode pengembangan, semua localhost boleh (Flutter web memakai port acak).
-// Di produksi, hanya alamat web admin.
+// Di produksi, hanya origin yang terdaftar di ADMIN_ORIGIN (boleh lebih dari satu,
+// dipisah koma di environment variable).
 app.use(
   cors({
     origin: (origin, cb) => {
       if (!origin) return cb(null, true); // Postman, Flutter mobile, server-ke-server
       const dev = config.NODE_ENV !== "production" && /^http:\/\/localhost:\d+$/.test(origin);
-      cb(null, dev || origin === config.ADMIN_ORIGIN);
+      cb(null, dev || config.ADMIN_ORIGIN.includes(origin));
     },
     credentials: true,
   }),

@@ -1,10 +1,36 @@
 import "dotenv/config";
 import { z } from "zod";
 
+/**
+ * ADMIN_ORIGIN boleh berisi satu atau beberapa origin dipisah koma.
+ * Contoh: "https://admin.sumbersira.id,https://app.sumbersira.id"
+ * Hasil: daftar origin tanpa garis miring di akhir, tanpa entri kosong,
+ * dan tanpa duplikat (perbandingan case-insensitive).
+ */
+function parseAdminOrigins(raw: string): string[] {
+  const seen = new Set<string>();
+  const origins: string[] = [];
+
+  for (const part of raw.split(",")) {
+    const origin = part.trim().replace(/\/+$/, "");
+    if (!origin) continue;
+
+    const key = origin.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    origins.push(origin);
+  }
+
+  return origins;
+}
+
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL wajib diisi"),
   PORT: z.coerce.number().default(4000),
-  ADMIN_ORIGIN: z.string().default("http://localhost:3000"),
+  ADMIN_ORIGIN: z
+    .string()
+    .default("http://localhost:3000")
+    .transform(parseAdminOrigins),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   TRUST_PROXY: z.coerce.number().default(0),
   PUBLIC_BASE_URL: z.string().default(""),
