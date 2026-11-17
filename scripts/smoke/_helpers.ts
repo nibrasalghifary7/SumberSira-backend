@@ -2,8 +2,9 @@ import type { Server } from "node:http";
 import { app } from "../../src/app.js";
 import { db } from "../../src/lib/db.js";
 
-// Pastikan mode simulasi saat smoke test
-process.env.PAYMENT_MODE = "simulation";
+// Default mode simulasi saat smoke test, kecuali skrip sudah menetapkan mode lain
+// (mis. p15 menguji webhook dengan PAYMENT_MODE=midtrans) sebelum modul ini dimuat.
+process.env.PAYMENT_MODE ??= "simulation";
 
 export interface TestContext {
   server: Server;

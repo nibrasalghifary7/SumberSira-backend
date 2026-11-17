@@ -383,15 +383,65 @@ Semua respons galat menggunakan format seragam:
 
 ## 7. Midtrans Integration & Webhook (P4)
 
+Alur pembayaran QRIS saat `PAYMENT_MODE=midtrans`:
+
+```
+Klien                Backend SumberSira                 Midtrans Core API
+  |  POST /tickets          |                                   |
+  |------------------------>|  POST /v2/charge (qris)           |
+  |                         |---------------------------------->|
+  |                         |<-- qr_string / actions[].url, ----|
+  |                         |    transaction_id, expiry_time    |
+  |<-- payment.qrString ----|                                   |
+  |    (tampilkan QR)       |                                   |
+  |                         |<------ POST notification ---------|
+  |                         |   (webhook, signature SHA-512)    |
+  |                         |   lalu GET /v2/:id/status         |
+  |                         |---------------------------------->|
+  |  GET /payments/:id      |<------ transaction_status --------|
+  |------------------------>|  (polling juga memakai getStatus) |
+  |<-- status: paid --------|                                   |
+```
+
+- **Charge** (`POST /v2/charge`, `payment_type: "qris"`): backend menyimpan
+  `providerOrderId` (unik, dipakai webhook untuk mencari Payment), `providerTransactionId`,
+  `qrString` (dari `qr_string`) dan/atau `qrUrl` (dari `actions[]` bernama
+  `generate-qr-code`), serta `expiresAt` (dari `expiry_time` WIB, default 15 menit).
+  Bila provider gagal atau tidak mengembalikan QR, `POST /tickets` / `POST /bookings`
+  membalas `502 PAYMENT_PROVIDER_ERROR` (bukan 500 generik).
+- **Webhook** (`POST /payments/midtrans/notification`): signature diverifikasi dengan
+  `timingSafeEqual`, `gross_amount` dicocokkan dengan `payment.amount`, lalu status
+  dikonfirmasi ulang lewat `GET /v2/:order_id/status` sebelum diterapkan.
+- **Polling** (`GET /payments/:id`): selama pembayaran masih `pending`, backend memanggil
+  `getStatus` sehingga status tetap benar walau webhook telat. Pada `PAYMENT_MODE=simulation`
+  status tetap `pending` sampai `POST /payments/:id/simulate-pay`.
+- **Mode simulasi**: `POST /payments/:id/simulate-pay` hanya hidup saat
+  `PAYMENT_MODE=simulation` dan `NODE_ENV !== "production"`; selain itu `404 NOT_FOUND`.
+
+Pemetaan `transaction_status` Midtrans:
+
+| `transaction_status` | `fraud_status` | Status pembayaran |
+|---|---|---|
+| `settlement` | — | `paid` |
+| `capture` | `accept` / kosong | `paid` |
+| `capture` | `challenge` | tetap `pending` (diabaikan) |
+| `capture` | `deny` | `failed` |
+| `expire` | — | `expired` |
+| `cancel` | — | `cancelled` |
+| `deny`, `failure` | — | `failed` |
+| `pending`, `refund`, lainnya | — | diabaikan (`200 { ok: true, ignored: true }`) |
+
 ### POST /payments/midtrans/notification
 - **Akses**: Publik (Webhook resmi Midtrans)
 - **Header**: `Content-Type: application/json`
 - **Body**: Payload standar HTTP Notification Midtrans (`order_id`, `status_code`, `gross_amount`, `signature_key`, `transaction_status`, dsb.)
 - **Keamanan**:
-  - Validasi signature SHA-512 menggunakan string `gross_amount` persis dengan `crypto.timingSafeEqual`.
+  - Validasi signature SHA-512 (`order_id + status_code + gross_amount + MIDTRANS_SERVER_KEY`) dengan `crypto.timingSafeEqual`.
   - Verifikasi ulang status ke Core API Midtrans `GET /v2/:order_id/status` sebagai sumber kebenaran sebelum mengupdate database.
   - Idempoten: pengiriman berulang tidak mengubah transaksi yang sudah final (`paid`).
-  - Respons `200 { ok: true }` atau `200 { ok: true, ignored: true }` jika order id tidak cocok/jumlah berbeda.
+  - Signature salah: `403 { "error": "FORBIDDEN" }`.
+  - Di `NODE_ENV=production`, webhook hanya aktif saat `PAYMENT_MODE=midtrans`; selain itu `404 NOT_FOUND`.
+  - Respons `200 { ok: true }` bila status diterapkan, atau `200 { ok: true, ignored: true }` bila order id tidak ditemukan, jumlah berbeda, atau status belum final/tak dikenal.
 
 
 ---

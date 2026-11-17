@@ -102,28 +102,36 @@ export const midtransProvider: PaymentProvider = {
       const data = (await res.json().catch(() => ({}))) as any;
 
       if (!res.ok || (data.status_code !== "201" && data.status_code !== 201)) {
-        throw new Error(`Midtrans charge gagal with status ${res.status}`);
+        throw new Error(
+          `Midtrans charge gagal (HTTP ${res.status}, status_code ${data.status_code ?? "-"})`
+        );
       }
 
       const transactionId = data.transaction_id;
-      const qrString = data.qr_string;
+
+      const qrString =
+        typeof data.qr_string === "string" && data.qr_string.length > 0
+          ? data.qr_string
+          : undefined;
 
       let qrUrl: string | undefined = undefined;
       if (Array.isArray(data.actions)) {
         const qrAction = data.actions.find(
           (a: any) => typeof a.name === "string" && a.name.startsWith("generate-qr-code")
         );
-        if (qrAction && qrAction.url) {
+        if (qrAction && typeof qrAction.url === "string" && qrAction.url) {
           qrUrl = qrAction.url;
         }
       }
 
-      let expiresAt: Date;
-      if (data.expiry_time) {
-        expiresAt = new Date(data.expiry_time);
-      } else {
-        expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+      // Tanpa QR, pembeli tidak bisa membayar. Perlakukan sebagai galat provider
+      // agar route membalas PAYMENT_PROVIDER_ERROR, bukan Payment tanpa QR.
+      if (!qrString && !qrUrl) {
+        throw new Error("Midtrans tidak mengembalikan qr_string maupun URL QR");
       }
+
+      const expiresAt =
+        parseMidtransExpiry(data.expiry_time) ?? new Date(Date.now() + 15 * 60 * 1000);
 
       return {
         providerTransactionId: transactionId,
@@ -158,6 +166,12 @@ export const midtransProvider: PaymentProvider = {
 
       const data = (await res.json().catch(() => ({}))) as any;
 
+      if (!res.ok || (data.status_code !== undefined && String(data.status_code) !== "200")) {
+        throw new Error(
+          `Midtrans status gagal (HTTP ${res.status}, status_code ${data.status_code ?? "-"})`
+        );
+      }
+
       return {
         status: mapMidtransStatus(data.transaction_status, data.fraud_status),
         raw: data,
@@ -168,6 +182,25 @@ export const midtransProvider: PaymentProvider = {
   },
 };
 
+/**
+ * Midtrans mengirim expiry_time sebagai "YYYY-MM-DD HH:mm:ss" dalam WIB (UTC+7),
+ * bukan ISO 8601 dengan zona waktu. Parse eksplisit agar tidak bergeser mengikuti
+ * zona waktu server.
+ */
+export function parseMidtransExpiry(value: unknown): Date | null {
+  if (typeof value !== "string") return null;
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(trimmed)
+    ? `${trimmed.replace(" ", "T")}+07:00`
+    : trimmed;
+
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 export function mapMidtransStatus(
   transactionStatus?: string,
   fraudStatus?: string
@@ -176,7 +209,11 @@ export function mapMidtransStatus(
     case "settlement":
       return "paid";
     case "capture":
-      return fraudStatus === "accept" ? "paid" : "pending";
+      // Capture normal langsung lunas; challenge/deny dari fraud detection
+      // belum boleh dianggap lunas.
+      if (fraudStatus === "deny") return "failed";
+      if (fraudStatus === "challenge") return "pending";
+      return "paid";
     case "pending":
       return "pending";
     case "expire":

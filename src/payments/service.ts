@@ -81,13 +81,20 @@ export async function syncPayment(paymentId: string) {
     return payment;
   }
 
-  // Jika simulation, simulation getStatus tetap pending
+  // Simulation getStatus selalu "pending", jadi mode simulasi tidak berubah.
+  // Midtrans: tanya status terbaru agar polling tetap benar walau webhook telat.
   if (payment.provider === "simulation" || payment.provider === "midtrans") {
-    const provider = providerFor(payment.provider);
     if (payment.providerOrderId) {
-      const res = await provider.getStatus(payment.providerOrderId);
-      if (res.status !== payment.status) {
-        await applyPaymentStatus(payment.id, res.status, res.raw);
+      const provider = providerFor(payment.provider);
+      try {
+        const res = await provider.getStatus(payment.providerOrderId);
+        if (res.status !== payment.status) {
+          await applyPaymentStatus(payment.id, res.status, res.raw);
+        }
+      } catch (err) {
+        // Jangan gagalkan GET /payments/:id hanya karena provider sedang bermasalah;
+        // status lama tetap ditampilkan dan polling berikutnya mencoba lagi.
+        console.warn(`Gagal sinkronisasi status payment ${payment.id}:`, err);
       }
     }
   }

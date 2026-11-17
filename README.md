@@ -155,10 +155,10 @@ Dibuat oleh `npm run seed`, **hanya untuk pengembangan**. Ganti dengan password 
 
 ## Smoke test
 
-Skrip uji end-to-end ada di `scripts/smoke/`, satu per fase pengembangan ditambah pemeriksaan konfigurasi (`p0.ts` sampai `p14.ts`). Semua skrip menyalakan servernya sendiri di port acak, memakai data berawalan `[SMOKE]`, dan **membersihkan data uji** di akhir, jadi aman dijalankan pada database tim.
+Skrip uji end-to-end ada di `scripts/smoke/`, satu per fase pengembangan ditambah pemeriksaan konfigurasi (`p0.ts` sampai `p15.ts`). Semua skrip menyalakan servernya sendiri di port acak, memakai data berawalan `[SMOKE]`, dan **membersihkan data uji** di akhir, jadi aman dijalankan pada database tim.
 
 ```
-npx tsx scripts/smoke/all.ts     # seluruh fase P0-P14 berurutan, berhenti di kegagalan pertama
+npx tsx scripts/smoke/all.ts     # seluruh fase P0-P15 berurutan, berhenti di kegagalan pertama
 npx tsx scripts/smoke/p8.ts      # satu fase saja
 ```
 
