@@ -41,6 +41,10 @@ const envSchema = z.object({
     .transform(parseAdminOrigins),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   TRUST_PROXY: z.coerce.number().default(0),
+  // Tingkat detail log terstruktur. "silent" dipakai saat test.
+  LOG_LEVEL: z
+    .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
+    .default("info"),
   // Dipakai untuk dua hal: (1) membentuk URL foto galeri/AI Photo oleh
   // storage lokal (src/lib/storage/index.ts), dan (2) header
   // X-Override-Notification/URL webhook Midtrans (src/payments/index.ts).

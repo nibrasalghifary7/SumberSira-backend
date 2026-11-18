@@ -5,6 +5,7 @@ import { hashPassword, verifyPassword } from "../lib/password.js";
 import { COOKIE, newToken, sha256 } from "../lib/session.js";
 import { requireAuth } from "../middleware/auth.js";
 import { loginLimiter } from "../lib/limiters.js";
+import { passwordSchema } from "../lib/validatePassword.js";
 
 export const authRouter = Router();
 
@@ -88,7 +89,7 @@ authRouter.delete("/sessions/:id", requireAuth, async (req, res) => {
 // Ubah password sendiri: sesi lain dicabut, sesi saat ini tetap
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1),
-  newPassword: z.string().min(8).max(72),
+  newPassword: passwordSchema,
 });
 
 authRouter.post("/change-password", requireAuth, async (req, res) => {

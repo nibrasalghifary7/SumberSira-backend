@@ -1,9 +1,9 @@
 import { startTestServer, request, loginAs, check } from "./_helpers.js";
 import { db } from "../../src/lib/db.js";
 
-const PASS_A = "sandiasmoke1";
-const PASS_A2 = "sandiasmoke2";
-const PASS_A_RESET = "sandireset1";
+const PASS_A = "SandiSmoke1";
+const PASS_A2 = "SandiSmoke2";
+const PASS_A_RESET = "SandiReset1";
 const EMAIL_A = "petugas-a@smoke.test";
 const EMAIL_B = "admin-b@smoke.test";
 

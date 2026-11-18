@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "../lib/db.js";
 import { hashPassword } from "../lib/password.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
+import { passwordSchema } from "../lib/validatePassword.js";
 
 export const adminStaffRouter = Router();
 
@@ -10,7 +11,7 @@ const createStaffSchema = z.object({
   name: z.string().trim().min(1).max(60),
   email: z.string().trim().email(),
   role: z.enum(["petugas", "admin"]),
-  password: z.string().min(8).max(72),
+  password: passwordSchema,
 });
 
 const patchStaffSchema = z.object({
@@ -20,7 +21,7 @@ const patchStaffSchema = z.object({
 });
 
 const resetPasswordSchema = z.object({
-  password: z.string().min(8).max(72),
+  password: passwordSchema,
 });
 
 // Semua rute di bawah khusus admin

@@ -24,7 +24,9 @@ async function run() {
     check("Body 'null' error VALIDATION", rNull.body?.error === "VALIDATION");
     check(
       "Respons body 'null' tidak membocorkan detail parser",
-      Object.keys(rNull.body ?? {}).join(",") === "error"
+      Object.keys(rNull.body ?? {})
+        .filter((k) => k !== "requestId")
+        .join(",") === "error"
     );
 
     // 2. Body bukan JSON sama sekali → 400 VALIDATION

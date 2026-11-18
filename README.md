@@ -52,6 +52,7 @@ Salin `.env.example` menjadi `.env`, lalu isi. Semua variabel punya nilai bawaan
 | `ADMIN_ORIGIN` | Tidak | `https://admin.sumbersira.id,https://app.sumbersira.id` | Origin yang diizinkan CORS. **Boleh daftar dipisah koma**; spasi dan garis miring di akhir dinormalisasi. Bawaan `http://localhost:3000`. Di luar daftar ini CORS ditolak (tanpa error 500). |
 | `NODE_ENV` | Tidak | `production` | `development`, `test`, atau `production`. Bawaan `development`. Produksi mematikan CORS localhost, mengaktifkan cookie `Secure`, dan mematikan `simulate-pay`. |
 | `TRUST_PROXY` | Tidak | `1` | Jumlah reverse proxy di depan server (Vercel/Railway/Render/NGINX biasanya `1`) agar rate limit membaca IP asli. Bawaan `0`. |
+| `LOG_LEVEL` | Tidak | `info` | Tingkat detail log JSON: `fatal`, `error`, `warn`, `info`, `debug`, `trace`, atau `silent`. Bawaan `info`; test memakai `silent`. |
 | `PUBLIC_BASE_URL` | **Wajib di produksi** bila `STORAGE_DRIVER=local` | `https://api.sumbersira.id` | URL publik backend ini, **dipakai untuk dua hal**: (1) membentuk URL foto galeri/AI Photo pada penyimpanan lokal, dan (2) URL webhook Midtrans (`X-Override-Notification`). Harus URL `http://`/`https://` valid; garis miring di akhir otomatis dibuang. Di `development` boleh kosong (memakai `http://localhost:PORT`). |
 | `PAYMENT_MODE` | Tidak | `simulation` | `simulation` (bawaan; QRIS palsu + endpoint uji bayar) atau `midtrans` (QRIS sungguhan). |
 | `MIDTRANS_ENV` | Tidak | `sandbox` | `sandbox` (default) atau `production`; menentukan URL API Midtrans. |
@@ -130,7 +131,8 @@ Daftarkan URL webhook berikut di dashboard Midtrans:
    npm run dev
    ```
 
-   Cek `http://localhost:4000/health` (harus `{"ok":true}`) dan `http://localhost:4000/health/db` (menampilkan jumlah wahana).
+   Cek `http://localhost:4000/health/live` (server hidup), `http://localhost:4000/health`
+   (server + database siap), dan `http://localhost:4000/health/db` (menampilkan jumlah wahana).
 
 ## Perintah npm
 
@@ -138,11 +140,16 @@ Daftarkan URL webhook berikut di dashboard Midtrans:
 |---|---|
 | `npm run dev` | Menjalankan server dengan reload otomatis (`tsx watch`) |
 | `npm start` | Menjalankan server produksi (`tsx src/index.ts`, tanpa reload) |
+| `npm run lint` | Pemeriksaan tipe TypeScript strict (`tsc --noEmit`) |
+| `npm test` | Tes otomatis HTTP (galat, akses, rate limit, request ID) tanpa database |
+| `npm run build` | Pemeriksaan build yang dipakai CI (sama dengan `tsc --noEmit`) |
 | `npm run seed` | Data awal: akun demo, 8 wahana, 4 slot jam |
 | `npm run seed:extra` | Contoh harga, ulasan, dan FAQ (hanya kalau tabel masih kosong) |
-| `npm run smoke` | Menjalankan seluruh smoke test P0–P12 secara berurutan |
+| `npm run smoke` | Menjalankan seluruh smoke test P0–P15 secara berurutan |
 
-Tidak ada script `build`: proyek ini dijalankan langsung dari TypeScript dengan `tsx`, jadi deploy tidak perlu langkah kompilasi.
+Proyek ini menjalankan TypeScript langsung dengan `tsx` (tanpa kompilasi ke `dist/`),
+jadi `npm run build` adalah pemeriksaan tipe yang dijalankan CI sebelum image Docker
+dibangun. Rincian build, deployment, dan strategi migrasi ada di `docs/deployment.md`.
 
 ## Akun demo
 
@@ -164,6 +171,26 @@ npx tsx scripts/smoke/p8.ts      # satu fase saja
 
 Syarat: `.env` terisi `DATABASE_URL`. Mode pembayaran boleh `simulation` (bawaan) — smoke test tidak memakai Midtrans sungguhan.
 
+## Tes otomatis (`tests/`)
+
+Tes cepat untuk lapisan HTTP, **tidak memerlukan database** dan dipakai CI:
+
+```bash
+npm test
+```
+
+Yang diuji (`tests/api.test.ts`):
+
+- header keamanan helmet, `X-Request-Id` (dari klien maupun dibuat server), dan formatnya;
+- route tidak dikenal → 404, body JSON rusak → 400, input tidak valid → 400;
+- endpoint privat tanpa sesi → 401, role tidak berhak → 403;
+- galat tak terduga → 500 **tanpa stack trace** atau pesan internal;
+- rate limit login → 429;
+- aturan kekuatan password.
+
+Tes memakai `NODE_ENV=test`, `LOG_LEVEL=silent`, dan `DATABASE_URL` dummy. Uji
+end-to-end yang benar-benar menyentuh database ada di `scripts/smoke/`.
+
 ## Keamanan
 
 - Password disimpan sebagai hash **scrypt** dengan salt, dibandingkan memakai `timingSafeEqual`.
@@ -174,6 +201,14 @@ Syarat: `.env` terisi `DATABASE_URL`. Mode pembayaran boleh `simulation` (bawaan
 - Rute `/admin/*` memakai `requireAuth`, dan aksi ubah data memakai `requireRole("admin")`.
 - Tipe berkas unggahan diverifikasi dari **magic bytes**, bukan dari `mimetype` klien.
 - Hash password tidak pernah dikirim ke klien; galat internal tidak membocorkan stack trace.
+- Setiap request mendapat **request ID** (`X-Request-Id`) yang dipakai bersama oleh log
+  terstruktur dan body galat, sehingga satu kejadian mudah ditelusuri.
+- Log menyensor `Authorization`, `Cookie`, `Set-Cookie`, serta password/token; body
+  request tidak dicatat seluruhnya.
+- Rate limit berlapis: jaring pengaman seluruh endpoint, pembatas per endpoint, dan
+  pembatas percobaan login per email.
+- Password baru wajib memenuhi aturan kekuatan (minimal 8 karakter, huruf kecil,
+  huruf besar, dan angka) — diperiksa juga di backend, bukan hanya di form.
 
 ## Struktur folder
 
@@ -186,33 +221,54 @@ prisma/
   seed.ts              Data awal (akun, wahana, slot)
   seed-extra.ts        Contoh harga, ulasan, FAQ
 src/
-  index.ts             Menyalakan server
-  app.ts               Memasang seluruh rute + middleware
+  index.ts             Menyalakan server, penyapu berkala, graceful shutdown (SIGTERM/SIGINT)
+  app.ts               Memasang seluruh rute + middleware (request ID, logger, helmet, CORS, rate limit)
   config.ts            Validasi variabel environment dengan Zod
+  logger.ts            Logger JSON (pino) + request ID (X-Request-Id)
   constants.ts         Slot booking, prediksi keramaian per jam
-  lib/                 db, password, session, pricing, time, seq, phone,
-                       limiters, errors, insight, enhancer, storage/
+  lib/                 db, password, validatePassword, session, pricing, time, seq,
+                       phone, limiters, errors, insight, enhancer, storage/
   middleware/auth.ts   requireAuth dan requireRole
+  types/express.d.ts   Tipe req.id, req.log, res.locals.user, res.locals.sessionId
   routes/              auth, rides, pricing, tickets, payments, bookings,
                        crowd, reviews, chat, gallery, ai-photo, insight, staff
   payments/            Provider pembayaran: simulation dan midtrans
+tests/
+  api.test.ts          Tes HTTP: 4xx/401/403/404/500, rate limit, request ID
 docs/
   api.md               Dokumentasi lengkap API + contoh curl/PowerShell
+  deployment.md        Docker, CI/CD, health check, graceful shutdown, strategi migrasi
 planning/
   planning.md          Rencana kerja fase P0-P12 dan catatan asumsi
 scripts/
   demo-crowd.ts        Menambah/menghapus data keramaian demo (isDemo)
   smoke/               Uji end-to-end per fase + all.ts
+.github/workflows/
+  ci.yml               Lint + test + build, lalu image Docker ke GHCR
+Dockerfile             Image multi-stage (deps → build → runtime)
 generated/             Prisma Client hasil generate (tidak di-commit)
 ```
 
 ## Deploy
 
-Backend dijalankan langsung dengan `tsx`, jadi tidak ada langkah build. Di server/hosting:
+Panduan lengkap (Docker multi-stage, Nginx, health check, zero-downtime,
+graceful shutdown, migrasi expand–contract, CI/CD) ada di **`docs/deployment.md`**.
+
+Cara tercepat dengan Docker:
+
+```bash
+docker build -t sumbersira-backend .
+docker run --rm -p 4000:4000 --env-file .env.production sumbersira-backend
+```
+
+Tanpa Docker, di server/hosting:
 
 1. `npm install` — otomatis menjalankan `prisma generate` (`postinstall`).
 2. `npx prisma migrate deploy` — menerapkan semua migrasi yang ada di `prisma/migrations/` (tidak pernah mereset data).
 3. `npm start` — menjalankan `tsx src/index.ts`.
+
+Setiap push ke `main` yang lolos CI (lint, test, build) otomatis membangun image
+Docker dan mendorongnya ke GHCR (`.github/workflows/ci.yml`).
 
 Variabel environment yang **wajib diisi di server produksi**:
 
@@ -223,6 +279,7 @@ Variabel environment yang **wajib diisi di server produksi**:
 | `ADMIN_ORIGIN` | Origin web admin/pengunjung yang sudah dideploy, boleh daftar dipisah koma, mis. `https://admin.sumbersira.id,https://app.sumbersira.id` |
 | `PUBLIC_BASE_URL` | URL publik API ini, mis. `https://api.sumbersira.id` (dipakai URL foto **dan** URL webhook Midtrans) |
 | `TRUST_PROXY` | `1` bila di belakang proxy (Vercel/Railway/Render/NGINX) |
+| `LOG_LEVEL` | `info` (pakai `debug` hanya saat investigasi) |
 | `PAYMENT_MODE` | `midtrans` untuk pembayaran sungguhan |
 | `MIDTRANS_SERVER_KEY` | Kunci server Midtrans (`MIDTRANS_ENV=production` untuk live) |
 | `MIDTRANS_CLIENT_KEY` | Kunci client untuk web admin |
@@ -255,5 +312,7 @@ Database Neon dipakai bersama, jadi data yang diubah satu orang terlihat oleh se
 - [x] P10 AI Insight (saran operasional berbasis aturan)
 - [x] P11 Manajemen akun petugas/admin + ubah password
 - [x] P12 Penutup: dokumentasi lengkap, smoke test seluruh fase, kesiapan deploy
+- [x] P13 Keamanan & observability: log JSON + request ID, error handler terpusat, tes HTTP otomatis
+- [x] P14 Deployment: Docker multi-stage, GitHub Actions CI/CD, graceful shutdown, health check database
 - [ ] Deploy backend dan web admin ke hosting produksi
 - [ ] Aplikasi Flutter tersambung ke endpoint publik
