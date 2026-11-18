@@ -1,0 +1,37 @@
+# Blueprint Render untuk backend Sumber Sira.
+# Cara pakai: push repo ini ke GitHub, lalu di Render pilih New > Blueprint dan pilih repo.
+# Render akan membuat web service yang otomatis deploy ulang setiap push ke branch main.
+services:
+  - type: web
+    name: sumbersira-api
+    runtime: node
+    region: singapore
+    buildCommand: npm ci --include=dev && npx prisma migrate deploy
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # Wajib diisi di dashboard Render (sync: false = ditanyakan saat membuat service).
+      - key: DATABASE_URL
+        sync: false
+      - key: ADMIN_ORIGIN
+        sync: false
+      - key: PUBLIC_BASE_URL
+        sync: false
+      # Demo tugas: NODE_ENV production tetapi tombol "Saya Sudah Bayar" tetap boleh dipakai.
+      # Untuk pembayaran sungguhan, ubah ke false dan pakai PAYMENT_MODE=midtrans.
+      - key: ALLOW_SIMULATE_PAY
+        value: "true"
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "1"
+      - key: PAYMENT_MODE
+        value: simulation
+      # Folder lokal hilang saat deploy ulang. Untuk produksi, ganti ke vercel-blob
+      # dan isi BLOB_READ_WRITE_TOKEN (lihat docs/deploy.md).
+      - key: STORAGE_DRIVER
+        value: local
+      # Alamat web Flutter bila nanti dideploy, mis. https://tim.github.io
+      - key: EXTRA_ORIGINS
+        sync: false

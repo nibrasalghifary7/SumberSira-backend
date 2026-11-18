@@ -34,7 +34,12 @@ app.use(express.json());
 app.use(cookieParser());
 
 // Di mode pengembangan, semua localhost, 127.0.0.1, dan IP LAN boleh (Flutter web memakai port acak, HP memakai IP LAN).
-// Di produksi, hanya alamat web admin.
+// Di produksi, hanya alamat web admin dan EXTRA_ORIGINS (mis. web Flutter yang dideploy).
+// Garis miring di akhir alamat dibuang supaya https://contoh.com/ dan https://contoh.com dianggap sama.
+const extraOrigins = config.EXTRA_ORIGINS.split(",")
+  .map((s) => s.trim().replace(/\/+$/, ""))
+  .filter(Boolean);
+const adminOrigin = config.ADMIN_ORIGIN.replace(/\/+$/, "");
 app.use(
   cors({
     origin: (origin, cb) => {
@@ -42,7 +47,7 @@ app.use(
       const dev =
         config.NODE_ENV !== "production" &&
         /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/.test(origin);
-      cb(null, dev || origin === config.ADMIN_ORIGIN);
+      cb(null, dev || origin === adminOrigin || extraOrigins.includes(origin));
     },
     credentials: true,
   }),

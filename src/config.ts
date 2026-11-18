@@ -8,6 +8,11 @@ const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   TRUST_PROXY: z.coerce.number().default(0),
   PUBLIC_BASE_URL: z.string().default(""),
+  // Izinkan tombol "Saya Sudah Bayar" (simulate-pay) di produksi. Hanya untuk demo/tugas;
+  // biarkan false bila pembayaran sungguhan (Midtrans) dipakai.
+  ALLOW_SIMULATE_PAY: z.enum(["true", "false"]).default("false").transform((v) => v === "true"),
+  // Alamat tambahan yang boleh memanggil API (dipisah koma), mis. web Flutter yang dideploy.
+  EXTRA_ORIGINS: z.string().default(""),
   PAYMENT_MODE: z.enum(["simulation", "midtrans"]).default("simulation"),
   MIDTRANS_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
   MIDTRANS_SERVER_KEY: z.string().default(""),

@@ -97,9 +97,9 @@ paymentsRouter.get("/:id", publicLimiter, async (req, res) => {
   res.json(formatPaymentDto(payment));
 });
 
-// POST /payments/:id/simulate-pay (Publik, hanya simulation mode dan bukan produksi)
+// POST /payments/:id/simulate-pay (Publik, hanya simulation mode; di produksi perlu ALLOW_SIMULATE_PAY=true)
 paymentsRouter.post("/:id/simulate-pay", publicLimiter, async (req, res) => {
-  if (config.PAYMENT_MODE !== "simulation" || config.NODE_ENV === "production") {
+  if (config.PAYMENT_MODE !== "simulation" || (config.NODE_ENV === "production" && !config.ALLOW_SIMULATE_PAY)) {
     return res.status(404).json({ error: "NOT_FOUND" });
   }
 

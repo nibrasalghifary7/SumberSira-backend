@@ -51,6 +51,8 @@ Salin `.env.example` menjadi `.env`, lalu isi. Semua variabel punya nilai bawaan
 | `ADMIN_ORIGIN` | `http://localhost:3000` | Alamat web admin yang diizinkan CORS |
 | `NODE_ENV` | `development` | `production` mengubah perilaku CORS, cookie, dan simulate-pay (lihat bawah) |
 | `TRUST_PROXY` | `0` | Jumlah proxy di depan server (di Vercel/Railway/Render biasanya `1`) agar rate limit membaca IP asli |
+| `ALLOW_SIMULATE_PAY` | `false` | `true` = tombol `simulate-pay` tetap boleh dipakai walau `NODE_ENV=production` (khusus demo) |
+| `EXTRA_ORIGINS` | `""` | Alamat lain yang boleh memanggil API, dipisah koma (mis. web Flutter yang dideploy) |
 | `PUBLIC_BASE_URL` | `""` | URL publik server, dipakai provider pembayaran untuk membuat QR Midtrans |
 | `PAYMENT_MODE` | `simulation` | `simulation` (QRIS palsu, cocok untuk pengembangan) atau `midtrans` |
 | `MIDTRANS_ENV` | `sandbox` | `sandbox` atau `production` (URL API Midtrans) |
@@ -63,7 +65,7 @@ File `.env` berisi password database dan kunci rahasia. **Jangan pernah di-commi
 
 ### Mode pembayaran
 
-- **`simulation`** (bawaan): QRIS dibuat palsu (`QRIS-SIM:...`), dan ada endpoint uji `POST /payments/:id/simulate-pay` untuk menandai lunas. Endpoint ini otomatis **hilang (404)** saat `PAYMENT_MODE` bukan `simulation` atau saat `NODE_ENV=production`.
+- **`simulation`** (bawaan): QRIS dibuat palsu (`QRIS-SIM:...`), dan ada endpoint uji `POST /payments/:id/simulate-pay` untuk menandai lunas. Endpoint ini otomatis **hilang (404)** saat `PAYMENT_MODE` bukan `simulation`, atau saat `NODE_ENV=production` tanpa `ALLOW_SIMULATE_PAY=true`.
 - **`midtrans`**: QR sungguhan dibuat lewat Core API Midtrans. Isi `MIDTRANS_SERVER_KEY` + `PUBLIC_BASE_URL`, lalu daftarkan webhook `POST <PUBLIC_BASE_URL>/payments/midtrans/notification` di dashboard Midtrans. Setiap notifikasi diverifikasi signature dan dikonfirmasi ulang ke Core API sebelum database diubah.
 
 ### Mode penyimpanan foto
@@ -189,6 +191,12 @@ Backend dijalankan langsung dengan `tsx`, jadi tidak ada langkah build. Di serve
 2. `npx prisma migrate deploy` — menerapkan semua migrasi yang ada di `prisma/migrations/` (tidak pernah mereset data).
 3. `npm start` — menjalankan `tsx src/index.ts`.
 
+### Render (otomatis setiap push ke `main`)
+
+Repo ini sudah punya `render.yaml`. Di [Render](https://dashboard.render.com): **New → Blueprint**, pilih
+repo ini, isi `DATABASE_URL`, `ADMIN_ORIGIN`, `PUBLIC_BASE_URL`, dan (opsional) `EXTRA_ORIGINS`. Setelah itu
+setiap push ke `main` otomatis deploy ulang. Cek `https://<alamat-render>/health`.
+
 Variabel environment yang **wajib diisi di server produksi**:
 
 | Variabel | Nilai untuk produksi |
@@ -198,13 +206,17 @@ Variabel environment yang **wajib diisi di server produksi**:
 | `ADMIN_ORIGIN` | URL web admin yang sudah dideploy, mis. `https://admin.sumbersira.id` |
 | `PUBLIC_BASE_URL` | URL publik API ini, mis. `https://api.sumbersira.id` |
 | `TRUST_PROXY` | `1` bila di belakang proxy (Vercel/Railway/Render/NGINX) |
+| `ALLOW_SIMULATE_PAY` | `true` hanya untuk demo dengan `PAYMENT_MODE=simulation`; `false` untuk produksi sungguhan |
+| `EXTRA_ORIGINS` | Alamat web Flutter yang dideploy, dipisah koma (CORS) |
 | `PAYMENT_MODE` | `midtrans` untuk pembayaran sungguhan |
 | `MIDTRANS_SERVER_KEY` | Kunci server Midtrans (`MIDTRANS_ENV=production` untuk live) |
 | `MIDTRANS_CLIENT_KEY` | Kunci client untuk web admin |
 | `STORAGE_DRIVER` | `vercel-blob` (folder lokal tidak persisten di platform cloud) |
 | `BLOB_READ_WRITE_TOKEN` | Token Vercel Blob |
 
-Perilaku yang otomatis berubah saat `NODE_ENV=production`: CORS hanya menerima `ADMIN_ORIGIN` (aturan `localhost:*` dihapus), cookie sesi menjadi `Secure`, endpoint `simulate-pay` dinonaktifkan, dan galat internal hanya mengembalikan `{"error":"INTERNAL"}` tanpa detail.
+Perilaku yang otomatis berubah saat `NODE_ENV=production`: CORS hanya menerima `ADMIN_ORIGIN` dan
+`EXTRA_ORIGINS` (aturan `localhost:*` dihapus), cookie sesi menjadi `Secure`, `simulate-pay` butuh
+`ALLOW_SIMULATE_PAY=true`, dan galat internal hanya mengembalikan `{"error":"INTERNAL"}` tanpa detail.
 
 ## Kerja kelompok dengan Git
 
