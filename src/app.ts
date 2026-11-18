@@ -33,13 +33,15 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
-// Di mode pengembangan, semua localhost boleh (Flutter web memakai port acak).
+// Di mode pengembangan, semua localhost, 127.0.0.1, dan IP LAN boleh (Flutter web memakai port acak, HP memakai IP LAN).
 // Di produksi, hanya alamat web admin.
 app.use(
   cors({
     origin: (origin, cb) => {
       if (!origin) return cb(null, true); // Postman, Flutter mobile, server-ke-server
-      const dev = config.NODE_ENV !== "production" && /^http:\/\/localhost:\d+$/.test(origin);
+      const dev =
+        config.NODE_ENV !== "production" &&
+        /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/.test(origin);
       cb(null, dev || origin === config.ADMIN_ORIGIN);
     },
     credentials: true,
