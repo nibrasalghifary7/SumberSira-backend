@@ -2,24 +2,12 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
-import { config } from "./config.js";
+import { config } from "./config/index.js";
 import path from "node:path";
-import { authRouter } from "./routes/auth.js";
-import { adminRidesRouter, ridesRouter, slotsRouter } from "./routes/rides.js";
-import { adminPricingRouter, bookingSlotsRouter, pricingRouter } from "./routes/pricing.js";
-import { adminTicketsRouter, ticketsRouter } from "./routes/tickets.js";
-import { adminPaymentsRouter, paymentsRouter } from "./routes/payments.js";
-import { adminBookingsRouter, bookingsRouter } from "./routes/bookings.js";
-import { adminDashboardRouter, crowdRouter } from "./routes/crowd.js";
-import { adminReviewsRouter, reviewsRouter } from "./routes/reviews.js";
-import { adminFaqRouter, chatRouter } from "./routes/chat.js";
-import { adminGalleryRouter, galleryRouter } from "./routes/gallery.js";
-import { aiPhotoRouter } from "./routes/ai-photo.js";
-import { adminInsightRouter } from "./routes/insight.js";
-import { adminStaffRouter } from "./routes/staff.js";
-import { errorHandler, notFoundHandler } from "./lib/errors.js";
-import { db } from "./lib/db.js";
-import { generalLimiter } from "./lib/limiters.js";
+import { errorHandler, notFoundHandler } from "./utils/errors.js";
+import { db } from "./config/database.js";
+import { registerRoutes } from "./routes/index.js";
+import { generalLimiter } from "./utils/limiters.js";
 import { httpLogger, requestId } from "./logger.js";
 
 export const app = express();
@@ -39,18 +27,20 @@ app.use(
   })
 );
 
-// Di mode pengembangan, semua localhost boleh (Flutter web memakai port acak).
-// Di produksi, hanya origin yang terdaftar di ADMIN_ORIGIN (boleh lebih dari satu,
-// dipisah koma di environment variable).
+// Di mode pengembangan, semua localhost, 127.0.0.1, dan IP LAN boleh (Flutter web memakai port acak, HP memakai IP LAN).
+// Di produksi, hanya origin yang terdaftar di ADMIN_ORIGIN/EXTRA_ORIGINS (boleh lebih dari satu,
+// dipisah koma di environment variable). Garis miring di akhir alamat sudah dibuang oleh config.
 app.use(
   cors({
     origin: (origin, cb) => {
       if (!origin) return cb(null, true); // Postman, Flutter mobile, server-ke-server
-      const dev = config.NODE_ENV !== "production" && /^http:\/\/localhost:\d+$/.test(origin);
-      cb(null, dev || config.ADMIN_ORIGIN.includes(origin));
+      const dev =
+        config.NODE_ENV !== "production" &&
+        /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/.test(origin);
+      cb(null, dev || config.ADMIN_ORIGIN.includes(origin) || config.EXTRA_ORIGINS.includes(origin));
     },
     credentials: true,
-  }),
+  })
 );
 
 // 3. Jaring pengaman rate limit untuk seluruh endpoint (selain health dan file statis).
@@ -114,30 +104,8 @@ app.get("/", (_req, res) => {
   res.json({ name: "SumberSira API", status: "ok" });
 });
 
-app.use("/auth", authRouter);
-app.use("/rides", ridesRouter);
-app.use("/time-slots", slotsRouter);
-app.use("/admin/rides", adminRidesRouter);
-app.use("/pricing", pricingRouter);
-app.use("/booking-slots", bookingSlotsRouter);
-app.use("/admin/pricing", adminPricingRouter);
-app.use("/tickets", ticketsRouter);
-app.use("/admin/tickets", adminTicketsRouter);
-app.use("/payments", paymentsRouter);
-app.use("/admin/payments", adminPaymentsRouter);
-app.use("/bookings", bookingsRouter);
-app.use("/admin/bookings", adminBookingsRouter);
-app.use("/crowd", crowdRouter);
-app.use("/admin/dashboard", adminDashboardRouter);
-app.use("/reviews", reviewsRouter);
-app.use("/admin/reviews", adminReviewsRouter);
-app.use("/chat", chatRouter);
-app.use("/admin/faq", adminFaqRouter);
-app.use("/gallery", galleryRouter);
-app.use("/admin/gallery", adminGalleryRouter);
-app.use("/ai-photo", aiPhotoRouter);
-app.use("/admin/insight", adminInsightRouter);
-app.use("/admin/staff", adminStaffRouter);
+// Semua rute dipasang dari routes/index.ts
+registerRoutes(app);
 
 // Sajikan file statis uploads hanya saat STORAGE_DRIVER=local
 if (config.STORAGE_DRIVER === "local") {

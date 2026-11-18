@@ -1,24 +1,20 @@
 import { Router } from "express";
 import { z } from "zod";
 import crypto from "node:crypto";
-import { db } from "../lib/db.js";
-import { getStorageDriver } from "../lib/storage/index.js";
-import { handleUpload, validateImageBuffer } from "../lib/storage/upload.js";
-import { writeLimiter, publicLimiter } from "../lib/limiters.js";
+import { db } from "../config/database.js";
+import { getStorageDriver } from "../services/storage/index.js";
+import { handleUpload, validateImageBuffer } from "../services/storage/upload.js";
+import { writeLimiter, publicLimiter } from "../utils/limiters.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import type { PhotoStatus } from "../../generated/prisma/enums.js";
+import { createGallerySchema, patchGallerySchema } from "../models/gallery.model.js";
 
 export const galleryRouter = Router();
 export const adminGalleryRouter = Router();
 
-const createGallerySchema = z.object({
-  title: z.string().trim().min(1).max(60),
-  owner: z.string().trim().min(1).max(40),
-});
 
-const patchGallerySchema = z.object({
-  status: z.enum(["approved", "rejected"]),
-});
+
+
 
 // POST /gallery (Publik, upload foto)
 galleryRouter.post("/", writeLimiter, handleUpload, async (req, res) => {

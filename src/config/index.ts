@@ -2,12 +2,11 @@ import "dotenv/config";
 import { z } from "zod";
 
 /**
- * ADMIN_ORIGIN boleh berisi satu atau beberapa origin dipisah koma.
- * Contoh: "https://admin.sumbersira.id,https://app.sumbersira.id"
- * Hasil: daftar origin tanpa garis miring di akhir, tanpa entri kosong,
- * dan tanpa duplikat (perbandingan case-insensitive).
+ * ADMIN_ORIGIN / EXTRA_ORIGINS boleh berisi satu atau beberapa origin
+ * dipisah koma. Hasil: daftar origin tanpa garis miring di akhir, tanpa
+ * entri kosong, dan tanpa duplikat (perbandingan case-insensitive).
  */
-function parseAdminOrigins(raw: string): string[] {
+function parseOrigins(raw: string): string[] {
   const seen = new Set<string>();
   const origins: string[] = [];
 
@@ -38,16 +37,21 @@ const envSchema = z.object({
   ADMIN_ORIGIN: z
     .string()
     .default("http://localhost:3000")
-    .transform(parseAdminOrigins),
+    .transform(parseOrigins),
+  // Alamat tambahan yang boleh memanggil API (dipisah koma), mis. web Flutter yang dideploy.
+  EXTRA_ORIGINS: z.string().default("").transform(parseOrigins),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   TRUST_PROXY: z.coerce.number().default(0),
   // Tingkat detail log terstruktur. "silent" dipakai saat test.
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),
+  // Izinkan tombol "Saya Sudah Bayar" (simulate-pay) di produksi. Hanya untuk demo/tugas;
+  // biarkan false bila pembayaran sungguhan (Midtrans) dipakai.
+  ALLOW_SIMULATE_PAY: z.enum(["true", "false"]).default("false").transform((v) => v === "true"),
   // Dipakai untuk dua hal: (1) membentuk URL foto galeri/AI Photo oleh
-  // storage lokal (src/lib/storage/index.ts), dan (2) header
-  // X-Override-Notification/URL webhook Midtrans (src/payments/index.ts).
+  // storage lokal (src/services/storage/index.ts), dan (2) header
+  // X-Override-Notification/URL webhook Midtrans (src/services/payments/index.ts).
   // Nilainya selalu sudah dinormalisasi (tanpa garis miring di akhir).
   PUBLIC_BASE_URL: z.string().default("").transform(normalizePublicBaseUrl),
   PAYMENT_MODE: z.enum(["simulation", "midtrans"]).default("simulation"),

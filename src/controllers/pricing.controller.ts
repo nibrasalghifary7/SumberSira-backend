@@ -1,7 +1,7 @@
 import { Router } from "express";
-import { getPricing, setPricing, PARKING_LABELS, pricingSchema } from "../lib/pricing.js";
-import { BOOKING_SLOT_ITEMS } from "../constants.js";
-import { publicLimiter } from "../lib/limiters.js";
+import { getPricing, setPricing, PARKING_LABELS, pricingSchema } from "../utils/pricing.js";
+import { BOOKING_SLOT_ITEMS } from "../config/constants.js";
+import { publicLimiter } from "../utils/limiters.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 
 export const pricingRouter = Router();

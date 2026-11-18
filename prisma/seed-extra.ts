@@ -1,5 +1,5 @@
-import { db } from "../src/lib/db.js";
-import { DEFAULT_PRICING } from "../src/lib/pricing.js";
+import { db } from "../src/config/database.js";
+import { DEFAULT_PRICING } from "../src/utils/pricing.js";
 
 const DEFAULT_QUICK_QUESTIONS = [
   "Jam buka?",
@@ -43,34 +43,7 @@ async function main() {
     console.log("- Setting quickQuestions sudah ada (dilewati).");
   }
 
-  // 3. Review awal (P6)
-  const reviewCount = await db.review.count();
-  if (reviewCount === 0) {
-    await db.review.createMany({
-      data: [
-        {
-          name: "Bu Rani S.",
-          stars: 5,
-          text: "Airnya jernih banget, anak-anak senang main di kolam!",
-        },
-        {
-          name: "Dimas P.",
-          stars: 4,
-          text: "Spot foto oke, tapi pas siang rame banget.",
-        },
-        {
-          name: "Kel. Ahmad",
-          stars: 5,
-          text: "Sewa ATV gampang lewat app, ga perlu antre.",
-        },
-      ],
-    });
-    console.log("- 3 Ulasan awal ditambahkan.");
-  } else {
-    console.log("- Ulasan sudah ada (dilewati).");
-  }
-
-  // 4. FAQ awal (P7)
+  // 3. FAQ awal (P7)
   const faqCount = await db.faq.count();
   if (faqCount === 0) {
     const defaultFaqs = [

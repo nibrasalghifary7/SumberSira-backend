@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
-import { db } from "../lib/db.js";
-import { COOKIE, sha256 } from "../lib/session.js";
+import { db } from "../config/database.js";
+import { COOKIE, sha256 } from "../services/session.js";
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   const token = req.cookies?.[COOKIE];

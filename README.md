@@ -53,6 +53,8 @@ Salin `.env.example` menjadi `.env`, lalu isi. Semua variabel punya nilai bawaan
 | `NODE_ENV` | Tidak | `production` | `development`, `test`, atau `production`. Bawaan `development`. Produksi mematikan CORS localhost, mengaktifkan cookie `Secure`, dan mematikan `simulate-pay`. |
 | `TRUST_PROXY` | Tidak | `1` | Jumlah reverse proxy di depan server (Vercel/Railway/Render/NGINX biasanya `1`) agar rate limit membaca IP asli. Bawaan `0`. |
 | `LOG_LEVEL` | Tidak | `info` | Tingkat detail log JSON: `fatal`, `error`, `warn`, `info`, `debug`, `trace`, atau `silent`. Bawaan `info`; test memakai `silent`. |
+| `ALLOW_SIMULATE_PAY` | Tidak | `false` | `true` = tombol `simulate-pay` tetap boleh dipakai walau `NODE_ENV=production` (khusus demo). |
+| `EXTRA_ORIGINS` | Tidak | `https://sumbersira.vercel.app` | Alamat lain yang boleh memanggil API, dipisah koma (mis. web Flutter yang dideploy). |
 | `PUBLIC_BASE_URL` | **Wajib di produksi** bila `STORAGE_DRIVER=local` | `https://api.sumbersira.id` | URL publik backend ini, **dipakai untuk dua hal**: (1) membentuk URL foto galeri/AI Photo pada penyimpanan lokal, dan (2) URL webhook Midtrans (`X-Override-Notification`). Harus URL `http://`/`https://` valid; garis miring di akhir otomatis dibuang. Di `development` boleh kosong (memakai `http://localhost:PORT`). |
 | `PAYMENT_MODE` | Tidak | `simulation` | `simulation` (bawaan; QRIS palsu + endpoint uji bayar) atau `midtrans` (QRIS sungguhan). |
 | `MIDTRANS_ENV` | Tidak | `sandbox` | `sandbox` (default) atau `production`; menentukan URL API Midtrans. |
@@ -89,7 +91,7 @@ Daftarkan URL webhook berikut di dashboard Midtrans:
 
 ### Mode pembayaran
 
-- **`simulation`** (bawaan): QRIS dibuat palsu (`QRIS-SIM:...`), dan ada endpoint uji `POST /payments/:id/simulate-pay` untuk menandai lunas. Endpoint ini otomatis **hilang (404)** saat `PAYMENT_MODE` bukan `simulation` atau saat `NODE_ENV=production`.
+- **`simulation`** (bawaan): QRIS dibuat palsu (`QRIS-SIM:...`), dan ada endpoint uji `POST /payments/:id/simulate-pay` untuk menandai lunas. Endpoint ini otomatis **hilang (404)** saat `PAYMENT_MODE` bukan `simulation`, atau saat `NODE_ENV=production` tanpa `ALLOW_SIMULATE_PAY=true`.
 - **`midtrans`**: QR sungguhan dibuat lewat Core API Midtrans. Isi `MIDTRANS_SERVER_KEY` + `PUBLIC_BASE_URL`, lalu daftarkan webhook `POST <PUBLIC_BASE_URL>/payments/midtrans/notification` di dashboard Midtrans. Setiap notifikasi diverifikasi signature dan dikonfirmasi ulang ke Core API sebelum database diubah.
 
 ### Mode penyimpanan foto
@@ -222,17 +224,24 @@ prisma/
   seed-extra.ts        Contoh harga, ulasan, FAQ
 src/
   index.ts             Menyalakan server, penyapu berkala, graceful shutdown (SIGTERM/SIGINT)
-  app.ts               Memasang seluruh rute + middleware (request ID, logger, helmet, CORS, rate limit)
-  config.ts            Validasi variabel environment dengan Zod
+  app.ts               Middleware (request ID, logger, helmet, CORS, JSON, rate limit) lalu registerRoutes
   logger.ts            Logger JSON (pino) + request ID (X-Request-Id)
-  constants.ts         Slot booking, prediksi keramaian per jam
-  lib/                 db, password, validatePassword, session, pricing, time, seq,
-                       phone, limiters, errors, insight, enhancer, storage/
+  config/              Konfigurasi
+    index.ts           Validasi variabel environment dengan Zod (objek config)
+    database.ts        Koneksi Prisma ke PostgreSQL
+    constants.ts       Slot booking, prediksi keramaian per jam
+  routes/index.ts      Daftar alamat dasar tiap controller (/auth, /rides, /tickets, /admin/...)
+  controllers/         Controller: router dan handler per modul (*.controller.ts):
+                       auth, rides, pricing, tickets, payments, bookings, crowd,
+                       reviews, chat, gallery, ai-photo, insight, staff
+  models/              Model: skema validasi input (zod) dan pemetaan data ke bentuk respons API
+                       (ride, ticket, booking, payment, auth, faq, gallery, review, staff, ai-photo).
+                       Struktur tabel database sendiri ada di prisma/schema.prisma
   middleware/auth.ts   requireAuth dan requireRole
+  services/            Logika bisnis: password, validatePassword, session, insight, enhancer,
+                       sweep, payments/ (simulation dan midtrans), storage/ (local dan vercel-blob)
+  utils/               Fungsi bantu tanpa state: pricing, time, seq, phone, limiters, errors
   types/express.d.ts   Tipe req.id, req.log, res.locals.user, res.locals.sessionId
-  routes/              auth, rides, pricing, tickets, payments, bookings,
-                       crowd, reviews, chat, gallery, ai-photo, insight, staff
-  payments/            Provider pembayaran: simulation dan midtrans
 tests/
   api.test.ts          Tes HTTP: 4xx/401/403/404/500, rate limit, request ID
 docs/
@@ -270,6 +279,12 @@ Tanpa Docker, di server/hosting:
 Setiap push ke `main` yang lolos CI (lint, test, build) otomatis membangun image
 Docker dan mendorongnya ke GHCR (`.github/workflows/ci.yml`).
 
+### Render (otomatis setiap push ke `main`)
+
+Repo ini sudah punya `render.yaml`. Di [Render](https://dashboard.render.com): **New → Blueprint**, pilih
+repo ini, isi `DATABASE_URL`, `ADMIN_ORIGIN`, `PUBLIC_BASE_URL`, dan (opsional) `EXTRA_ORIGINS`. Setelah itu
+setiap push ke `main` otomatis deploy ulang. Cek `https://<alamat-render>/health`.
+
 Variabel environment yang **wajib diisi di server produksi**:
 
 | Variabel | Nilai untuk produksi |
@@ -280,13 +295,17 @@ Variabel environment yang **wajib diisi di server produksi**:
 | `PUBLIC_BASE_URL` | URL publik API ini, mis. `https://api.sumbersira.id` (dipakai URL foto **dan** URL webhook Midtrans) |
 | `TRUST_PROXY` | `1` bila di belakang proxy (Vercel/Railway/Render/NGINX) |
 | `LOG_LEVEL` | `info` (pakai `debug` hanya saat investigasi) |
+| `ALLOW_SIMULATE_PAY` | `true` hanya untuk demo dengan `PAYMENT_MODE=simulation`; `false` untuk produksi sungguhan |
+| `EXTRA_ORIGINS` | Alamat web Flutter yang dideploy, dipisah koma (CORS) |
 | `PAYMENT_MODE` | `midtrans` untuk pembayaran sungguhan |
 | `MIDTRANS_SERVER_KEY` | Kunci server Midtrans (`MIDTRANS_ENV=production` untuk live) |
 | `MIDTRANS_CLIENT_KEY` | Kunci client untuk web admin |
 | `STORAGE_DRIVER` | `vercel-blob` (folder lokal tidak persisten di platform cloud) |
 | `BLOB_READ_WRITE_TOKEN` | Token Vercel Blob |
 
-Perilaku yang otomatis berubah saat `NODE_ENV=production`: CORS hanya menerima `ADMIN_ORIGIN` (aturan `localhost:*` dihapus), cookie sesi menjadi `Secure`, endpoint `simulate-pay` dinonaktifkan, dan galat internal hanya mengembalikan `{"error":"INTERNAL"}` tanpa detail.
+Perilaku yang otomatis berubah saat `NODE_ENV=production`: CORS hanya menerima `ADMIN_ORIGIN` dan
+`EXTRA_ORIGINS` (aturan `localhost:*` dihapus), cookie sesi menjadi `Secure`, `simulate-pay` butuh
+`ALLOW_SIMULATE_PAY=true`, dan galat internal hanya mengembalikan `{"error":"INTERNAL"}` tanpa detail.
 
 ## Kerja kelompok dengan Git
 

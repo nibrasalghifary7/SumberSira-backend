@@ -1,10 +1,10 @@
 import "dotenv/config";
 import { app } from "./app.js";
-import { config } from "./config.js";
+import { config } from "./config/index.js";
 import { logger } from "./logger.js";
-import { db } from "./lib/db.js";
-import { applyPaymentStatus, syncPayment } from "./payments/service.js";
-import { sweepExpiredSessions } from "./lib/sweep.js";
+import { db } from "./config/database.js";
+import { applyPaymentStatus, syncPayment } from "./services/payments/service.js";
+import { sweepExpiredSessions } from "./services/sweep.js";
 
 const port = config.PORT;
 const server = app.listen(port, () => logger.info({ port }, "API jalan"));

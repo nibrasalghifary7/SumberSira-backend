@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { db } from "./db.js";
+import { db } from "../config/database.js";
 
 export const parkingSchema = z.object({
   none: z.literal(0),

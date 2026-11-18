@@ -85,7 +85,27 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Deploy dijalankan setelah image tersedia. Karena server tujuan berbeda-beda,
+  # Deploy otomatis ke Render setelah CI lulus.
+  # Isi secret RENDER_DEPLOY_HOOK_URL (Render > service > Settings > Deploy Hook).
+  # Kalau memakai auto-deploy bawaan Render, job ini boleh dibiarkan (akan dilewati).
+  render:
+    name: Trigger deploy Render
+    needs: verify
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger deploy hook
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -n "$HOOK" ]; then
+            curl -fsS -X POST "$HOOK"
+            echo "Deploy backend diminta."
+          else
+            echo "Lewati: secret RENDER_DEPLOY_HOOK_URL belum diisi (auto-deploy Render tetap berjalan)."
+          fi
+
+  # Deploy manual ke server sendiri. Karena server tujuan berbeda-beda,
   # langkah ini sengaja berupa contoh: isi `DEPLOY_HOST`/kunci SSH di Secrets,
   # lalu hapus komentar. Migrasi database dijalankan SEBELUM container baru
   # menerima trafik (lihat docs/deployment.md).

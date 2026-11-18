@@ -152,7 +152,7 @@ describe("format galat API", () => {
 
   it("role yang tidak berhak menghasilkan 403", async () => {
     const { requestId } = await import("../src/logger.js");
-    const { errorHandler } = await import("../src/lib/errors.js");
+    const { errorHandler } = await import("../src/utils/errors.js");
     const { requireRole } = await import("../src/middleware/auth.js");
 
     const app = express();
@@ -183,7 +183,7 @@ describe("format galat API", () => {
 
   it("galat tak terduga menjadi 500 tanpa stack trace atau pesan internal", async () => {
     const { requestId } = await import("../src/logger.js");
-    const { errorHandler } = await import("../src/lib/errors.js");
+    const { errorHandler } = await import("../src/utils/errors.js");
 
     const app = express();
     app.use(requestId);
@@ -240,12 +240,12 @@ describe("rate limit", () => {
 
 describe("aturan kekuatan password", () => {
   it("menerima password yang memenuhi semua syarat", async () => {
-    const { passwordSchema } = await import("../src/lib/validatePassword.js");
+    const { passwordSchema } = await import("../src/services/validatePassword.js");
     assert.equal(passwordSchema.safeParse("Rahasia123").success, true);
   });
 
   it("menolak password pendek atau tanpa variasi karakter", async () => {
-    const { passwordSchema } = await import("../src/lib/validatePassword.js");
+    const { passwordSchema } = await import("../src/services/validatePassword.js");
     assert.equal(passwordSchema.safeParse("pendek1").success, false);
     assert.equal(passwordSchema.safeParse("rahasiabesar1").success, false);
     assert.equal(passwordSchema.safeParse("RAHASIABESAR1").success, false);

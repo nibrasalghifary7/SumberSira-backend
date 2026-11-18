@@ -1,5 +1,5 @@
-import { db } from "../src/lib/db.js";
-import { hashPassword } from "../src/lib/password.js";
+import { db } from "../src/config/database.js";
+import { hashPassword } from "../src/services/password.js";
 
 const WAHANA = [
   { id: "ban-kecil", name: "Ban Kecil/Sedang", category: "Sewa Alat", price: 5000, unit: "", icon: "ring" },

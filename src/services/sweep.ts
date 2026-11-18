@@ -1,4 +1,4 @@
-import { db } from "./db.js";
+import { db } from "../config/database.js";
 
 /**
  * Hapus sesi admin yang sudah melewati `expiresAt`.

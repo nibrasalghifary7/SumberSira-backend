@@ -7,9 +7,9 @@
  *                                             total 186 orang.
  *   npx tsx scripts/demo-crowd.ts remove   -> hapus semua tiket demo (isDemo=true).
  */
-import { db } from "../src/lib/db.js";
-import { jakartaDate } from "../src/lib/time.js";
-import { getPricing } from "../src/lib/pricing.js";
+import { db } from "../src/config/database.js";
+import { jakartaDate } from "../src/utils/time.js";
+import { getPricing } from "../src/utils/pricing.js";
 
 const TICKET_COUNT = 15;
 const TOTAL_PEOPLE = 186;

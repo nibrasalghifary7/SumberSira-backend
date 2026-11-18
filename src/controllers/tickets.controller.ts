@@ -1,62 +1,24 @@
 import { Router } from "express";
 import { z } from "zod";
 import crypto from "node:crypto";
-import { db } from "../lib/db.js";
-import { config } from "../config.js";
-import { getPricing, PARKING_LABELS } from "../lib/pricing.js";
-import { jakartaDate } from "../lib/time.js";
-import { nextSeq } from "../lib/seq.js";
-import { normalizeWa } from "../lib/phone.js";
-import { providerFor } from "../payments/index.js";
-import { writeLimiter, publicLimiter } from "../lib/limiters.js";
+import { db } from "../config/database.js";
+import { config } from "../config/index.js";
+import { getPricing, PARKING_LABELS } from "../utils/pricing.js";
+import { jakartaDate } from "../utils/time.js";
+import { nextSeq } from "../utils/seq.js";
+import { normalizeWa } from "../utils/phone.js";
+import { providerFor } from "../services/payments/index.js";
+import { writeLimiter, publicLimiter } from "../utils/limiters.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import type { Parking, PaymentMethod, PaymentStatus, TicketStatus } from "../../generated/prisma/enums.js";
+import { createTicketSchema, formatTicketDto } from "../models/ticket.model.js";
 
 export const ticketsRouter = Router();
 export const adminTicketsRouter = Router();
 
-const createTicketSchema = z.object({
-  name: z.string().trim().min(1).max(60),
-  whatsapp: z.string(),
-  adults: z.number().int().min(1).max(30),
-  kids: z.number().int().min(0).max(10).default(0),
-  parking: z.enum(["none", "motor", "mobil", "bus"]),
-  arrival: z.string().min(1),
-  paymentMethod: z.enum(["qris", "cash"]),
-});
 
-function formatTicketDto(ticket: any, payment?: any) {
-  const latestPayment = payment ?? (ticket.payments && ticket.payments.length > 0 ? ticket.payments[0] : null);
 
-  return {
-    code: ticket.code,
-    name: ticket.name,
-    whatsapp: ticket.whatsapp,
-    adults: ticket.adults,
-    kids: ticket.kids,
-    people: ticket.adults + ticket.kids,
-    parking: ticket.parking,
-    arrival: ticket.arrival,
-    visitDate: ticket.visitDate,
-    amount: ticket.amount,
-    status: ticket.status,
-    paymentStatus: ticket.paymentStatus,
-    checkInAt: ticket.checkInAt ? ticket.checkInAt.toISOString() : null,
-    checkOutAt: ticket.checkOutAt ? ticket.checkOutAt.toISOString() : null,
-    createdAt: ticket.createdAt.toISOString(),
-    payment: latestPayment
-      ? {
-          id: latestPayment.id,
-          method: latestPayment.method,
-          status: latestPayment.status,
-          amount: latestPayment.amount,
-          qrString: latestPayment.qrString ?? null,
-          qrUrl: latestPayment.qrUrl ?? null,
-          expiresAt: latestPayment.expiresAt ? latestPayment.expiresAt.toISOString() : null,
-        }
-      : null,
-  };
-}
+
 
 // POST /tickets (Beli tiket)
 ticketsRouter.post("/", writeLimiter, async (req, res) => {

@@ -1,7 +1,7 @@
 import { startTestServer, request, loginAs, check } from "./_helpers.js";
-import { db } from "../../src/lib/db.js";
-import { getCrowdLabel } from "../../src/constants.js";
-import { jakartaDate } from "../../src/lib/time.js";
+import { db } from "../../src/config/database.js";
+import { getCrowdLabel } from "../../src/config/constants.js";
+import { jakartaDate } from "../../src/utils/time.js";
 
 async function run() {
   console.log("=== Menjalankan Smoke Test P5 ===");

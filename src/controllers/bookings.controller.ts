@@ -1,80 +1,29 @@
 import { Router } from "express";
 import { z } from "zod";
 import crypto from "node:crypto";
-import { db } from "../lib/db.js";
-import { config } from "../config.js";
-import { BOOKING_SLOTS, BOOKING_SLOT_ITEMS } from "../constants.js";
-import { jakartaDate, compactDate } from "../lib/time.js";
-import { nextSeq } from "../lib/seq.js";
-import { normalizeWa } from "../lib/phone.js";
-import { providerFor } from "../payments/index.js";
-import { writeLimiter, publicLimiter } from "../lib/limiters.js";
+import { db } from "../config/database.js";
+import { config } from "../config/index.js";
+import { BOOKING_SLOTS, BOOKING_SLOT_ITEMS } from "../config/constants.js";
+import { jakartaDate, compactDate } from "../utils/time.js";
+import { nextSeq } from "../utils/seq.js";
+import { normalizeWa } from "../utils/phone.js";
+import { providerFor } from "../services/payments/index.js";
+import { writeLimiter, publicLimiter } from "../utils/limiters.js";
 import { requireAuth } from "../middleware/auth.js";
+import { createBookingSchema, getBookingLineLabel, formatBookingDto } from "../models/booking.model.js";
 
 export const bookingsRouter = Router();
 export const adminBookingsRouter = Router();
 
-const bookingItemSchema = z.object({
-  rideId: z.string().min(1),
-  qty: z.number().int().min(1).max(20),
-});
 
-const createBookingSchema = z.object({
-  name: z.string().trim().min(1).max(60),
-  whatsapp: z.string(),
-  slot: z.enum(BOOKING_SLOTS as unknown as [string, ...string[]]),
-  visitDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  items: z.array(bookingItemSchema).min(1).max(8),
-});
 
-function getSlotLabel(slotId: string): string {
-  const found = BOOKING_SLOT_ITEMS.find((s) => s.id === slotId);
-  return found ? found.label : slotId;
-}
 
-function getBookingLineLabel(ride: { name: string; unit: string }): string {
-  if (!ride.unit || ride.unit.trim() === "") {
-    return ride.name;
-  }
-  if (ride.unit.toLowerCase().includes("menit")) {
-    return `${ride.name} (${ride.unit})`;
-  }
-  return `${ride.name} (per ${ride.unit})`;
-}
 
-function formatBookingDto(booking: any, payment?: any) {
-  const latestPayment = payment ?? (booking.payments && booking.payments.length > 0 ? booking.payments[0] : null);
 
-  return {
-    code: booking.code,
-    name: booking.name,
-    whatsapp: booking.whatsapp,
-    slot: booking.slot,
-    slotLabel: getSlotLabel(booking.slot),
-    visitDate: booking.visitDate,
-    amount: booking.amount,
-    paymentStatus: booking.paymentStatus,
-    createdAt: booking.createdAt.toISOString(),
-    lines: (booking.lines || []).map((line: any) => ({
-      rideId: line.rideId,
-      name: line.name,
-      qty: line.qty,
-      unitPrice: line.unitPrice,
-      subtotal: line.qty * line.unitPrice,
-    })),
-    payment: latestPayment
-      ? {
-          id: latestPayment.id,
-          method: latestPayment.method,
-          status: latestPayment.status,
-          amount: latestPayment.amount,
-          qrString: latestPayment.qrString ?? null,
-          qrUrl: latestPayment.qrUrl ?? null,
-          expiresAt: latestPayment.expiresAt ? latestPayment.expiresAt.toISOString() : null,
-        }
-      : null,
-  };
-}
+
+
+
+
 
 // POST /bookings (Publik, pembayaran HANYA QRIS)
 bookingsRouter.post("/", writeLimiter, async (req, res) => {

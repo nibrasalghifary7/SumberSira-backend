@@ -1,5 +1,5 @@
-import { db } from "../lib/db.js";
-import { config } from "../config.js";
+import { db } from "../../config/database.js";
+import { config } from "../../config/index.js";
 import { providerFor } from "./index.js";
 
 type AllowedPaymentStatus = "pending" | "paid" | "failed" | "expired" | "cancelled";

@@ -1,5 +1,5 @@
 import { startTestServer, request, loginAs, check } from "./_helpers.js";
-import { db } from "../../src/lib/db.js";
+import { db } from "../../src/config/database.js";
 
 const PASS_A = "SandiSmoke1";
 const PASS_A2 = "SandiSmoke2";

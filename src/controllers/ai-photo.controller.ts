@@ -1,18 +1,16 @@
 import { Router } from "express";
 import { z } from "zod";
 import crypto from "node:crypto";
-import { db } from "../lib/db.js";
-import { getStorageDriver } from "../lib/storage/index.js";
-import { handleUpload, validateImageBuffer } from "../lib/storage/upload.js";
-import { sharpEnhancer } from "../lib/enhancer.js";
-import { aiPhotoLimiter, writeLimiter, publicLimiter } from "../lib/limiters.js";
+import { db } from "../config/database.js";
+import { getStorageDriver } from "../services/storage/index.js";
+import { handleUpload, validateImageBuffer } from "../services/storage/upload.js";
+import { sharpEnhancer } from "../services/enhancer.js";
+import { aiPhotoLimiter, writeLimiter, publicLimiter } from "../utils/limiters.js";
+import { shareSchema } from "../models/ai-photo.model.js";
 
 export const aiPhotoRouter = Router();
 
-const shareSchema = z.object({
-  title: z.string().trim().min(1).max(60),
-  owner: z.string().trim().min(1).max(40),
-});
+
 
 // POST /ai-photo (Publik, proses sinkron: simpan asli, enhance, simpan hasil)
 aiPhotoRouter.post("/", aiPhotoLimiter, handleUpload, async (req, res) => {

@@ -1,6 +1,6 @@
 import type { Server } from "node:http";
 import { app } from "../../src/app.js";
-import { db } from "../../src/lib/db.js";
+import { db } from "../../src/config/database.js";
 
 // Default mode simulasi saat smoke test, kecuali skrip sudah menetapkan mode lain
 // (mis. p15 menguji webhook dengan PAYMENT_MODE=midtrans) sebelum modul ini dimuat.

@@ -55,8 +55,8 @@ function sign(orderId: string, statusCode: string, grossAmount: string): string 
 
 async function run() {
   const { startTestServer, request, check } = await import("./_helpers.js");
-  const { db } = await import("../../src/lib/db.js");
-  const { midtransProvider, mapMidtransStatus } = await import("../../src/payments/index.js");
+  const { db } = await import("../../src/config/database.js");
+  const { midtransProvider, mapMidtransStatus } = await import("../../src/services/payments/index.js");
 
   console.log("=== Menjalankan Smoke Test P15 (kesiapan Midtrans) ===");
   const { baseUrl, close } = await startTestServer();

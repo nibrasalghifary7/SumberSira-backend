@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { put, del } from "@vercel/blob";
-import { config } from "../../config.js";
+import { config } from "../../config/index.js";
 
 export interface StorageResult {
   url: string;

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 import pino, { type Logger } from "pino";
 import { pinoHttp } from "pino-http";
-import { config } from "./config.js";
+import { config } from "./config/index.js";
 
 /**
  * Logger terstruktur (JSON) untuk seluruh aplikasi.

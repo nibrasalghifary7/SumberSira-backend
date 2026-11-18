@@ -5,7 +5,7 @@ dari mode `simulation` ke pembayaran QRIS sungguhan lewat Midtrans, mulai dari d
 sampai produksi.
 
 Kode yang dipakai: **Midtrans Core API `/v2/charge` dengan `payment_type: "qris"`**
-(lihat `src/payments/index.ts`). Artinya **tidak** memakai Snap/`client_key`, tidak ada halaman
+(lihat `src/services/payments/index.ts`). Artinya **tidak** memakai Snap/`client_key`, tidak ada halaman
 redirect Midtrans, dan aplikasi Flutter tetap menampilkan QR sendiri dari `qrString` yang dikirim backend.
 
 ---
@@ -89,7 +89,7 @@ PUBLIC_BASE_URL="https://xxxx-xx-xx-xx-xx.ngrok-free.app"
 Catatan:
 
 - `PAYMENT_MODE=midtrans` membutuhkan `MIDTRANS_SERVER_KEY`; kalau kosong server **menolak start**
-  dengan pesan jelas (sudah dijaga di `src/config.ts`).
+  dengan pesan jelas (sudah dijaga di `src/config/index.ts`).
 - Selama `PAYMENT_MODE=simulation`, tombol **"Saya Sudah Bayar"** muncul di aplikasi.
   Setelah `midtrans`, tombol itu hilang otomatis (endpoint `simulate-pay` membalas 404).
 - `PUBLIC_BASE_URL` **wajib** diisi saat uji Midtrans di lokal, karena Midtrans tidak bisa
