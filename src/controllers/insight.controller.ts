@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { db } from "../lib/db.js";
-import { HOURLY_FORECAST } from "../constants.js";
-import { ruleBasedInsightGenerator } from "../lib/insight.js";
-import { calculateCurrentCrowd } from "./crowd.js";
+import { db } from "../config/database.js";
+import { HOURLY_FORECAST } from "../config/constants.js";
+import { ruleBasedInsightGenerator } from "../services/insight.js";
+import { calculateCurrentCrowd } from "./crowd.controller.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 
 export const adminInsightRouter = Router();

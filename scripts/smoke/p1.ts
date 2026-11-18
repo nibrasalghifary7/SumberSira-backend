@@ -1,6 +1,6 @@
 import { startTestServer, request, loginAs, check } from "./_helpers.js";
-import { nextSeq } from "../../src/lib/seq.js";
-import { db } from "../../src/lib/db.js";
+import { nextSeq } from "../../src/utils/seq.js";
+import { db } from "../../src/config/database.js";
 
 async function run() {
   console.log("=== Menjalankan Smoke Test P1 ===");

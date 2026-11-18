@@ -1,29 +1,18 @@
 import { Router } from "express";
 import { z } from "zod";
-import { db } from "../lib/db.js";
-import { writeLimiter, publicLimiter } from "../lib/limiters.js";
+import { db } from "../config/database.js";
+import { writeLimiter, publicLimiter } from "../utils/limiters.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
+import { chatMessageSchema, createFaqSchema, updateFaqSchema } from "../models/faq.model.js";
 
 export const chatRouter = Router();
 export const adminFaqRouter = Router();
 
-const chatMessageSchema = z.object({
-  message: z.string().trim().min(1).max(300),
-});
 
-const createFaqSchema = z.object({
-  keys: z.array(z.string().trim().min(1).max(30)).min(1).max(10),
-  answer: z.string().trim().min(1).max(500),
-  sortOrder: z.number().int().optional(),
-  active: z.boolean().optional(),
-});
 
-const updateFaqSchema = z.object({
-  keys: z.array(z.string().trim().min(1).max(30)).min(1).max(10).optional(),
-  answer: z.string().trim().min(1).max(500).optional(),
-  sortOrder: z.number().int().optional(),
-  active: z.boolean().optional(),
-});
+
+
+
 
 // POST /chat (Publik, pencocokan kata kunci FAQ aktif urut sortOrder)
 chatRouter.post("/", writeLimiter, async (req, res) => {

@@ -1,27 +1,17 @@
 import { Router } from "express";
 import { z } from "zod";
-import { db } from "../lib/db.js";
-import { hashPassword } from "../lib/password.js";
+import { db } from "../config/database.js";
+import { hashPassword } from "../services/password.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
+import { createStaffSchema, patchStaffSchema, resetPasswordSchema } from "../models/staff.model.js";
 
 export const adminStaffRouter = Router();
 
-const createStaffSchema = z.object({
-  name: z.string().trim().min(1).max(60),
-  email: z.string().trim().email(),
-  role: z.enum(["petugas", "admin"]),
-  password: z.string().min(8).max(72),
-});
 
-const patchStaffSchema = z.object({
-  name: z.string().trim().min(1).max(60).optional(),
-  role: z.enum(["petugas", "admin"]).optional(),
-  active: z.boolean().optional(),
-});
 
-const resetPasswordSchema = z.object({
-  password: z.string().min(8).max(72),
-});
+
+
+
 
 // Semua rute di bawah khusus admin
 adminStaffRouter.use(requireAuth, requireRole("admin"));

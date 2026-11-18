@@ -1,33 +1,17 @@
 import { Router } from "express";
 import crypto from "node:crypto";
-import { db } from "../lib/db.js";
-import { config } from "../config.js";
-import { applyPaymentStatus, syncPayment } from "../payments/service.js";
-import { providerFor } from "../payments/index.js";
-import { publicLimiter } from "../lib/limiters.js";
+import { db } from "../config/database.js";
+import { config } from "../config/index.js";
+import { applyPaymentStatus, syncPayment } from "../services/payments/service.js";
+import { providerFor } from "../services/payments/index.js";
+import { publicLimiter } from "../utils/limiters.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
+import { formatPaymentDto } from "../models/payment.model.js";
 
 export const paymentsRouter = Router();
 export const adminPaymentsRouter = Router();
 
-function formatPaymentDto(p: any) {
-  return {
-    id: p.id,
-    ticketId: p.ticketId,
-    bookingId: p.bookingId,
-    method: p.method,
-    provider: p.provider,
-    status: p.status,
-    amount: p.amount,
-    providerOrderId: p.providerOrderId,
-    qrString: p.qrString,
-    qrUrl: p.qrUrl,
-    expiresAt: p.expiresAt ? p.expiresAt.toISOString() : null,
-    paidAt: p.paidAt ? p.paidAt.toISOString() : null,
-    createdAt: p.createdAt.toISOString(),
-    updatedAt: p.updatedAt.toISOString(),
-  };
-}
+
 
 // POST /payments/midtrans/notification (Webhook Midtrans: Publik, tanpa auth, tanpa limit ketat)
 paymentsRouter.post("/midtrans/notification", async (req, res) => {

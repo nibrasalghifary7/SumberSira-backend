@@ -1,5 +1,5 @@
-import { db } from "../src/lib/db.js";
-import { DEFAULT_PRICING } from "../src/lib/pricing.js";
+import { db } from "../src/config/database.js";
+import { DEFAULT_PRICING } from "../src/utils/pricing.js";
 
 const DEFAULT_QUICK_QUESTIONS = [
   "Jam buka?",

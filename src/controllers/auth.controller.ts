@@ -1,18 +1,15 @@
 import { Router } from "express";
 import { z } from "zod";
-import { db } from "../lib/db.js";
-import { hashPassword, verifyPassword } from "../lib/password.js";
-import { COOKIE, newToken, sha256 } from "../lib/session.js";
+import { db } from "../config/database.js";
+import { hashPassword, verifyPassword } from "../services/password.js";
+import { COOKIE, newToken, sha256 } from "../services/session.js";
 import { requireAuth } from "../middleware/auth.js";
-import { loginLimiter } from "../lib/limiters.js";
+import { loginLimiter } from "../utils/limiters.js";
+import { loginSchema, changePasswordSchema } from "../models/auth.model.js";
 
 export const authRouter = Router();
 
-const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
-  remember: z.boolean().optional(),
-});
+
 
 authRouter.post("/login", loginLimiter, async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
@@ -85,11 +82,7 @@ authRouter.delete("/sessions/:id", requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
-// Ubah password sendiri: sesi lain dicabut, sesi saat ini tetap
-const changePasswordSchema = z.object({
-  currentPassword: z.string().min(1),
-  newPassword: z.string().min(8).max(72),
-});
+
 
 authRouter.post("/change-password", requireAuth, async (req, res) => {
   const parsed = changePasswordSchema.safeParse(req.body);

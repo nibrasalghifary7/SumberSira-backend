@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 import { startTestServer, request, check } from "./_helpers.js";
-import { db } from "../../src/lib/db.js";
-import { mapMidtransStatus } from "../../src/payments/index.js";
-import { config } from "../../src/config.js";
+import { db } from "../../src/config/database.js";
+import { mapMidtransStatus } from "../../src/services/payments/index.js";
+import { config } from "../../src/config/index.js";
 
 async function run() {
   console.log("=== Menjalankan Smoke Test P4 ===");

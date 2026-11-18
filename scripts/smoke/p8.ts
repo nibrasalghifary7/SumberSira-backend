@@ -1,6 +1,6 @@
 import { startTestServer, request, loginAs, check } from "./_helpers.js";
-import { db } from "../../src/lib/db.js";
-import { getStorageDriver } from "../../src/lib/storage/index.js";
+import { db } from "../../src/config/database.js";
+import { getStorageDriver } from "../../src/services/storage/index.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 

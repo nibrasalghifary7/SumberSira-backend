@@ -1,6 +1,6 @@
 import type { Server } from "node:http";
 import { app } from "../../src/app.js";
-import { db } from "../../src/lib/db.js";
+import { db } from "../../src/config/database.js";
 
 // Pastikan mode simulasi saat smoke test
 process.env.PAYMENT_MODE = "simulation";

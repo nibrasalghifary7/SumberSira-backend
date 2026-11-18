@@ -47,12 +47,12 @@ Struktur file yang ada (verifikasi di P0):
 ```
 prisma/schema.prisma, prisma/migrations/, prisma/seed.ts, prisma.config.ts
 src/index.ts                  Menyalakan server; memuat CORS, JSON, cookie-parser, rute
-src/lib/db.ts                 export const db (PrismaClient + adapter pg)
-src/lib/password.ts           hashPassword, verifyPassword (scrypt)
-src/lib/session.ts            COOKIE, sha256, newToken
+src/config/database.ts                 export const db (PrismaClient + adapter pg)
+src/services/password.ts           hashPassword, verifyPassword (scrypt)
+src/services/session.ts            COOKIE, sha256, newToken
 src/middleware/auth.ts        requireAuth, requireRole("admin" | "petugas")
-src/routes/auth.ts            authRouter
-src/routes/rides.ts           ridesRouter, slotsRouter, adminRidesRouter
+src/controllers/auth.controller.ts            authRouter
+src/controllers/rides.controller.ts           ridesRouter, slotsRouter, adminRidesRouter
 generated/prisma/             Prisma Client hasil generate (tidak di-commit)
 ```
 
@@ -60,7 +60,7 @@ Fakta teknis penting:
 
 - **ESM** (`"type": "module"`). Import relatif memakai akhiran `.js`, contoh `import { db } from "../lib/db.js"`.
 - Dijalankan dengan `tsx` (`npm run dev`). `tsconfig` minimal: target ES2023, module ESNext, moduleResolution bundler, strict.
-- Import Prisma Client: `../../generated/prisma/client.js` (dari `src/lib/`). **Lihat isi folder `generated/prisma/` untuk path ekspor enum dan tipe. Jangan menebaknya.**
+- Import Prisma Client: `../generated/prisma/client.js` (dari `src/config/database.ts`). **Lihat isi folder `generated/prisma/` untuk path ekspor enum dan tipe. Jangan menebaknya.**
 - `res.locals.user` (tanpa passwordHash) dan `res.locals.sessionId` diisi oleh `requireAuth`.
 - Bentuk galat yang sudah dipakai: `{ "error": "KODE_HURUF_BESAR" }`, untuk validasi ditambah `issues`.
 - Bentuk data wahana (jangan diubah): `{ id, name, category, price, unit, icon, status: "Aktif" | "Nonaktif" }`.
@@ -140,15 +140,15 @@ Kerjakan sesuai asumsi ini. Laporkan di Laporan Fase terkait agar manusia bisa m
 
 ```
 src/app.ts                 Membuat dan mengekspor app Express (index.ts hanya menyalakan)
-src/config.ts              Membaca dan memvalidasi environment (zod)
-src/lib/time.ts            Helper WIB
-src/lib/errors.ts          Kelas HttpError + handler galat global
-src/lib/limiters.ts        Pembatas laju (express-rate-limit)
-src/lib/seq.ts             Penomoran atomik (tabel Counter)
-src/lib/phone.ts           Normalisasi WhatsApp
-src/lib/storage/           Penyimpanan file (local dan vercel-blob)
-src/payments/              Penyedia pembayaran dan layanannya
-src/routes/*.ts            Satu file per modul
+src/config/index.ts              Membaca dan memvalidasi environment (zod)
+src/utils/time.ts            Helper WIB
+src/utils/errors.ts          Kelas HttpError + handler galat global
+src/utils/limiters.ts        Pembatas laju (express-rate-limit)
+src/utils/seq.ts             Penomoran atomik (tabel Counter)
+src/utils/phone.ts           Normalisasi WhatsApp
+src/services/storage/           Penyimpanan file (local dan vercel-blob)
+src/services/payments/              Penyedia pembayaran dan layanannya
+src/controllers/*.controller.ts            Satu file per modul
 scripts/smoke/             Skrip uji per fase
 docs/api.md                Dokumentasi endpoint (ditambah tiap fase)
 ```
@@ -308,7 +308,7 @@ model AiPhotoJob {
 - key `pricing`: `{ "ticketPricePerPerson": 5000, "capacity": 300, "parking": { "none": 0, "motor": 3000, "mobil": 10000, "bus": 20000 } }`
 - key `quickQuestions`: `["Jam buka?", "Cara sewa ATV?", "Harga tiket?", "Parkir bus?"]`
 
-**Konstanta kode** (`src/constants.ts`):
+**Konstanta kode** (`src/config/constants.ts`):
 
 - `BOOKING_SLOTS = ["08-09","09-10","10-11","11-12","12-13","13-14","14-15","15-16"]`
 - `HOURLY_FORECAST` = `[{hour:"08",count:30},{hour:"09",count:60},{hour:"10",count:135},{hour:"11",count:225},{hour:"12",count:285},{hour:"13",count:270},{hour:"14",count:240},{hour:"15",count:120},{hour:"16",count:45}]`
@@ -326,7 +326,7 @@ model AiPhotoJob {
 
 1. Pasang: `helmet`, `express-rate-limit`.
 2. Pindahkan pembuatan app dari `src/index.ts` ke `src/app.ts` (`export const app`). `index.ts` hanya mengimpor `app` dan memanggil `listen`. **Perilaku harus identik** (CORS yang sudah ada, `express.json`, `cookie-parser`, semua rute lama).
-3. `src/config.ts`: baca dan validasi env dengan zod. Variabel dan bawaannya:
+3. `src/config/index.ts`: baca dan validasi env dengan zod. Variabel dan bawaannya:
 
 | Variabel | Bawaan | Keterangan |
 |---|---|---|
@@ -344,11 +344,11 @@ model AiPhotoJob {
 | `BLOB_READ_WRITE_TOKEN` | kosong | wajib bila `STORAGE_DRIVER=vercel-blob` |
 
    Gagal cepat dengan pesan jelas jika `PAYMENT_MODE=midtrans` tetapi kunci kosong. **Jangan pernah mencetak nilai rahasia.**
-4. `src/lib/time.ts`: `jakartaDate(d = new Date())` mengembalikan `"YYYY-MM-DD"` WIB (pakai `Intl.DateTimeFormat` dengan `timeZone: "Asia/Jakarta"`); `startOfDayJakarta(dateStr)` = `new Date(dateStr + "T00:00:00+07:00")`; `compactDate(dateStr)` mengembalikan `"YYYYMMDD"`.
-5. `src/lib/errors.ts`: kelas `HttpError(status, code, extra?)` dan handler galat global (`{ error: code }`; `500` menjadi `{ error: "INTERNAL" }` tanpa stack di produksi; log galat di server). Tambah handler `404` JSON `{ error: "NOT_FOUND" }` untuk rute tak dikenal (di akhir rantai rute).
+4. `src/utils/time.ts`: `jakartaDate(d = new Date())` mengembalikan `"YYYY-MM-DD"` WIB (pakai `Intl.DateTimeFormat` dengan `timeZone: "Asia/Jakarta"`); `startOfDayJakarta(dateStr)` = `new Date(dateStr + "T00:00:00+07:00")`; `compactDate(dateStr)` mengembalikan `"YYYYMMDD"`.
+5. `src/utils/errors.ts`: kelas `HttpError(status, code, extra?)` dan handler galat global (`{ error: code }`; `500` menjadi `{ error: "INTERNAL" }` tanpa stack di produksi; log galat di server). Tambah handler `404` JSON `{ error: "NOT_FOUND" }` untuk rute tak dikenal (di akhir rantai rute).
 6. `helmet` dengan `crossOriginResourcePolicy: { policy: "cross-origin" }` (gambar upload harus bisa dimuat dari asal lain).
 7. `app.set("trust proxy", config.TRUST_PROXY)`. Tambah `GET /` yang mengembalikan `{ "name": "SumberSira API", "status": "ok" }`.
-8. `src/lib/limiters.ts`: `publicLimiter` (60 permintaan/menit/IP) dan `writeLimiter` (20 permintaan/menit/IP) memakai `express-rate-limit`, galat `429 { error: "RATE_LIMITED" }`. Belum dipasang ke rute mana pun.
+8. `src/utils/limiters.ts`: `publicLimiter` (60 permintaan/menit/IP) dan `writeLimiter` (20 permintaan/menit/IP) memakai `express-rate-limit`, galat `429 { error: "RATE_LIMITED" }`. Belum dipasang ke rute mana pun.
 9. Pembatas login: pasang pada `POST /auth/login` pembatas **5 percobaan gagal per menit** (`skipSuccessfulRequests: true`) dengan kunci = **email yang dinormalisasi** (huruf kecil, trim). Alasannya, panggilan login berasal dari server Next.js sehingga IP selalu sama. Jika body tidak valid, kunci memakai IP. Ini satu-satunya perubahan yang diizinkan pada `routes/auth.ts` di fase ini (pasang middleware saja, logika login tidak diubah).
 10. Susun harness smoke di `scripts/smoke/_helpers.ts`: `startTestServer()`, `request()`, `loginAs()`, `check(nama, kondisi)`, dan pembersihan data `[SMOKE]`.
 11. `scripts/smoke/p0.ts`: periksa `GET /`, `/health`, `/health/db`, `/rides` (8 item atau lebih), `/time-slots` (4), rute tak dikenal mengembalikan `404 JSON`, login admin berhasil, `GET /auth/me` berhasil, login 6 kali dengan password salah menghasilkan `429`, `GET /admin/rides` tanpa cookie `401`.
@@ -362,14 +362,14 @@ model AiPhotoJob {
 
 **Migrasi:** `Counter`, `Setting`.
 
-1. `src/lib/seq.ts`: `nextSeq(key: string, initial: number): Promise<number>` secara **atomik** dengan SQL mentah (hindari balapan):
+1. `src/utils/seq.ts`: `nextSeq(key: string, initial: number): Promise<number>` secara **atomik** dengan SQL mentah (hindari balapan):
    ```sql
    INSERT INTO "Counter"("key","value") VALUES ($1, $2)
    ON CONFLICT ("key") DO UPDATE SET "value" = "Counter"."value" + 1
    RETURNING "value"
    ```
    Panggilan pertama mengembalikan `initial`, berikutnya naik 1.
-2. `src/lib/pricing.ts`: `getPricing()` membaca `Setting` key `pricing` (jika belum ada, kembalikan nilai bawaan bagian 7). `setPricing()` memvalidasi dengan zod: `ticketPricePerPerson` int 500..1.000.000; `capacity` int 1..100.000; tiap tarif parkir int 0..1.000.000, dan `none` selalu 0.
+2. `src/utils/pricing.ts`: `getPricing()` membaca `Setting` key `pricing` (jika belum ada, kembalikan nilai bawaan bagian 7). `setPricing()` memvalidasi dengan zod: `ticketPricePerPerson` int 500..1.000.000; `capacity` int 1..100.000; tiap tarif parkir int 0..1.000.000, dan `none` selalu 0.
 3. `prisma/seed-extra.ts` dan skrip `"seed:extra": "tsx prisma/seed-extra.ts"` di `package.json`. **Hanya membuat data yang belum ada, tidak menimpa** (`create` bila tidak ada; jangan `update`). Di P1 isinya: `Setting` `pricing` dan `quickQuestions`. Fase lain menambah isinya (FAQ di P7, ulasan di P6).
 4. Endpoint:
 
@@ -388,7 +388,7 @@ model AiPhotoJob {
 
 **Migrasi:** enum `Parking`, `PaymentMethod`, `PaymentStatus`, `PaymentProvider`, `TicketStatus`; model `Ticket`, `Payment`. Tambahkan `Booking` di P3, jadi untuk sementara hapus relasi `booking` dari `Payment` dan tambahkan di migrasi P3 (jaga migrasi tetap aditif).
 
-**Penyedia pembayaran (`src/payments/`):**
+**Penyedia pembayaran (`src/services/payments/`):**
 
 ```ts
 interface PaymentProvider {
@@ -403,9 +403,9 @@ interface PaymentProvider {
 
 - `simulationProvider`: `createQris` mengembalikan `qrString = "QRIS-SIM:" + orderId + ":" + amount`, `expiresAt = sekarang + 15 menit`. `getStatus` selalu `pending` (status dibayar diubah lewat `simulate-pay` atau `mark-paid`).
 - `providerFor(mode)` memilih penyedia dari `config.PAYMENT_MODE`.
-- `src/payments/service.ts` berisi logika bersama: `applyPaymentStatus(paymentId, newStatus, payload?)` dalam **satu transaksi**: hanya transisi maju dari `pending` (`paid` bersifat final). Saat `paid`: isi `paidAt`, dan ubah `paymentStatus` pada Ticket atau Booking terkait. Saat `failed|expired|cancelled`: ubah `paymentStatus` yang sama. **Idempoten**: mengulang status yang sama tidak mengubah apa pun. `syncPayment(paymentId)`: jika `pending` dan metode `qris`, panggil `provider.getStatus` lalu `applyPaymentStatus`.
+- `src/services/payments/service.ts` berisi logika bersama: `applyPaymentStatus(paymentId, newStatus, payload?)` dalam **satu transaksi**: hanya transisi maju dari `pending` (`paid` bersifat final). Saat `paid`: isi `paidAt`, dan ubah `paymentStatus` pada Ticket atau Booking terkait. Saat `failed|expired|cancelled`: ubah `paymentStatus` yang sama. **Idempoten**: mengulang status yang sama tidak mengubah apa pun. `syncPayment(paymentId)`: jika `pending` dan metode `qris`, panggil `provider.getStatus` lalu `applyPaymentStatus`.
 
-**`src/lib/phone.ts`:** `normalizeWa(input)` sesuai asumsi A2.
+**`src/utils/phone.ts`:** `normalizeWa(input)` sesuai asumsi A2.
 
 **Endpoint:**
 
@@ -611,7 +611,7 @@ Simpan `keys` dalam huruf kecil. **Smoke `p7.ts`:** setiap contoh pertanyaan ("j
 **Prasyarat manusia untuk produksi:** `STORAGE_DRIVER=vercel-blob` dan `BLOB_READ_WRITE_TOKEN` di `.env` (Blob store dibuat manusia di dashboard Vercel). **Fase ini harus selesai dan lolos uji dengan `STORAGE_DRIVER=local` tanpa token.**
 
 1. Pasang: `multer` (versi 2.x) dan `@types/multer`, `@vercel/blob`.
-2. `src/lib/storage/`: antarmuka `Storage { put(key, buffer, contentType): Promise<{ url, key }>; remove(key): Promise<void> }`. Implementasi `localStorageDriver` (tulis ke `uploads/<key>`, buat folder bila perlu, URL = `<PUBLIC_BASE_URL atau http://localhost:PORT>/uploads/<key>`; sajikan `express.static("uploads")` **hanya** saat driver `local`) dan `vercelBlobDriver` (`put` dengan `access: "public"` dan `del`; **baca dokumentasi `@vercel/blob` terbaru untuk bentuk API saat ini**). Pemilih driver membaca `config.STORAGE_DRIVER`.
+2. `src/services/storage/`: antarmuka `Storage { put(key, buffer, contentType): Promise<{ url, key }>; remove(key): Promise<void> }`. Implementasi `localStorageDriver` (tulis ke `uploads/<key>`, buat folder bila perlu, URL = `<PUBLIC_BASE_URL atau http://localhost:PORT>/uploads/<key>`; sajikan `express.static("uploads")` **hanya** saat driver `local`) dan `vercelBlobDriver` (`put` dengan `access: "public"` dan `del`; **baca dokumentasi `@vercel/blob` terbaru untuk bentuk API saat ini**). Pemilih driver membaca `config.STORAGE_DRIVER`.
 3. Validasi unggahan (helper bersama dipakai juga oleh P9): batas **4 MB** (multer `limits.fileSize`; melebihi = `413 FILE_TOO_LARGE`), tipe diperiksa dari **byte awal (magic bytes)**: JPEG `FF D8 FF`, PNG `89 50 4E 47`, WebP `RIFF....WEBP`. Selain itu `415 UNSUPPORTED_MEDIA`. Jangan mempercayai `mimetype` atau nama file dari klien. Kunci penyimpanan dibuat server (`gallery/<cuid>.<ext>`), bukan dari nama file pengguna.
 
 | Method | Path | Akses | Fungsi |

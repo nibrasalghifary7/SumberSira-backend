@@ -1,4 +1,4 @@
-import { db } from "./db.js";
+import { db } from "../config/database.js";
 
 /**
  * Menghasilkan nomor urut berikutnya secara atomik menggunakan raw SQL (ON CONFLICT DO UPDATE).

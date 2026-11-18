@@ -1,17 +1,14 @@
 import { Router } from "express";
 import { z } from "zod";
-import { db } from "../lib/db.js";
-import { writeLimiter, publicLimiter } from "../lib/limiters.js";
+import { db } from "../config/database.js";
+import { writeLimiter, publicLimiter } from "../utils/limiters.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
+import { createReviewSchema } from "../models/review.model.js";
 
 export const reviewsRouter = Router();
 export const adminReviewsRouter = Router();
 
-const createReviewSchema = z.object({
-  name: z.string().trim().min(1).max(40),
-  stars: z.number().int().min(1).max(5),
-  text: z.string().trim().min(1).max(500),
-});
+
 
 // GET /reviews (Publik, tanpa moderasi)
 reviewsRouter.get("/", publicLimiter, async (req, res) => {

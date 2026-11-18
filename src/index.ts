@@ -1,12 +1,17 @@
 import "dotenv/config";
 import { app } from "./app.js";
-import { config } from "./config.js";
-import { db } from "./lib/db.js";
-import { applyPaymentStatus, syncPayment } from "./payments/service.js";
-import { sweepExpiredSessions } from "./lib/sweep.js";
+import { config } from "./config/index.js";
+import { db } from "./config/database.js";
+import { applyPaymentStatus, syncPayment } from "./services/payments/service.js";
+import { sweepExpiredSessions } from "./services/sweep.js";
 
 const port = config.PORT;
-const server = app.listen(port, () => console.log(`API jalan di http://localhost:${port}`));
+const server = app.listen(port, () => {
+  console.log(`API jalan di http://localhost:${port}`);
+  // Hangatkan dua koneksi database sejak awal (sambungan pertama ke Neon makan beberapa detik),
+  // supaya halaman admin pertama yang dibuka tidak ikut menunggu.
+  void Promise.all([db.$queryRaw`SELECT 1`, db.$queryRaw`SELECT 1`]).catch(() => console.warn("Database belum terjangkau saat start; akan dicoba lagi saat ada permintaan."));
+});
 
 // Penyapu berkala setiap 5 menit: ambil pembayaran QRIS pending yang expiresAt sudah lewat > 2 menit
 const SWEEP_INTERVAL_MS = 5 * 60 * 1000;

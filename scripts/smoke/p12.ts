@@ -1,5 +1,5 @@
-import { db } from "../../src/lib/db.js";
-import { sweepExpiredSessions } from "../../src/lib/sweep.js";
+import { db } from "../../src/config/database.js";
+import { sweepExpiredSessions } from "../../src/services/sweep.js";
 import { check } from "./_helpers.js";
 
 const MARK = "[SMOKE]-token-";

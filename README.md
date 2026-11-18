@@ -164,15 +164,22 @@ prisma/
   seed-extra.ts        Contoh harga, ulasan, FAQ
 src/
   index.ts             Menyalakan server
-  app.ts               Memasang seluruh rute + middleware
-  config.ts            Validasi variabel environment dengan Zod
-  constants.ts         Slot booking, prediksi keramaian per jam
-  lib/                 db, password, session, pricing, time, seq, phone,
-                       limiters, errors, insight, enhancer, storage/
+  app.ts               Middleware (helmet, CORS, JSON) lalu memanggil registerRoutes
+  config/              Konfigurasi
+    index.ts           Validasi variabel environment dengan Zod (objek config)
+    database.ts        Koneksi Prisma ke PostgreSQL
+    constants.ts       Slot booking, prediksi keramaian per jam
+  routes/index.ts      Daftar alamat dasar tiap controller (/auth, /rides, /tickets, /admin/...)
+  controllers/         Controller: router dan handler per modul (*.controller.ts):
+                       auth, rides, pricing, tickets, payments, bookings, crowd,
+                       reviews, chat, gallery, ai-photo, insight, staff
+  models/              Model: skema validasi input (zod) dan pemetaan data ke bentuk respons API
+                       (ride, ticket, booking, payment, auth, faq, gallery, review, staff, ai-photo).
+                       Struktur tabel database sendiri ada di prisma/schema.prisma
   middleware/auth.ts   requireAuth dan requireRole
-  routes/              auth, rides, pricing, tickets, payments, bookings,
-                       crowd, reviews, chat, gallery, ai-photo, insight, staff
-  payments/            Provider pembayaran: simulation dan midtrans
+  services/            Logika bisnis: password, session, insight, enhancer, sweep,
+                       payments/ (simulation dan midtrans), storage/ (local dan vercel-blob)
+  utils/               Fungsi bantu tanpa state: pricing, time, seq, phone, limiters, errors
 docs/
   api.md               Dokumentasi lengkap API + contoh curl/PowerShell
 planning/
