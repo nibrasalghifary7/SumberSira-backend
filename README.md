@@ -60,22 +60,28 @@ Salin `.env.example` menjadi `.env`, lalu isi. Semua variabel punya nilai bawaan
 | `MIDTRANS_CLIENT_KEY` | `""` | Dipakai web admin untuk Snap/QR |
 | `STORAGE_DRIVER` | `local` | `local` (folder `uploads/`, cocok pengembangan) atau `vercel-blob` |
 | `BLOB_READ_WRITE_TOKEN` | `""` | Wajib diisi bila `STORAGE_DRIVER=vercel-blob` |
-| `ANTHROPIC_API_KEY` | `""` | Kunci Claude untuk dua fitur AI. Kosong = AI mati, aplikasi tetap jalan memakai cadangan tanpa AI |
-| `CHAT_MODEL` | `claude-opus-5-5` | Model chatbot. Pilihan lebih murah dan cepat: `claude-haiku-5-5`, `claude-sonnet-5-5` |
-| `PHOTO_AI_MODEL` | `claude-opus-5-5` | Model yang menilai foto (hanya melihat dan memberi angka, tidak menghasilkan gambar) |
-| `CHAT_AI_DAILY_LIMIT` | `300` | Batas jawaban AI per hari (WIB) sebagai pengaman biaya; lewat batas, chatbot beralih ke FAQ. `0` = matikan AI |
-| `PHOTO_AI_DAILY_LIMIT` | `200` | Batas penilaian foto oleh AI per hari |
+| `AI_API_KEY` | `""` | Kunci GRATIS dari aistudio.google.com untuk dua fitur AI. Kosong = AI mati, aplikasi tetap jalan memakai cadangan tanpa AI |
+| `AI_BASE_URL` | `https://generativelanguage.googleapis.com/v1beta/openai` | Alamat API yang kompatibel dengan OpenAI. Bawaan Gemini; penyedia gratis lain (mis. Groq, OpenRouter) cukup ganti alamat, kunci, dan model |
+| `CHAT_MODEL` | `gemini-3.5-flash-lite` | Model chatbot. Gratis dan kuotanya paling longgar; `gemini-3.6-flash` atau `gemini-3.8-flash` lebih pintar tapi kuota hariannya jauh lebih sedikit |
+| `PHOTO_AI_MODEL` | `gemini-3.5-flash-lite` | Model yang menilai foto (hanya melihat dan memberi angka, tidak menghasilkan gambar) |
+| `AI_REASONING_EFFORT` | `""` | Opsional: `minimal`, `low`, `medium`, `high`. Kosong = bawaan model |
+| `CHAT_AI_DAILY_LIMIT` | `150` | Batas jawaban AI per hari (WIB) supaya kuota gratis tidak habis; lewat batas, chatbot beralih ke FAQ. `0` = matikan AI |
+| `PHOTO_AI_DAILY_LIMIT` | `100` | Batas penilaian foto oleh AI per hari. `0` = foto tidak dikirim ke AI sama sekali, mesin memakai statistik foto |
 
 File `.env` berisi password database dan kunci rahasia. **Jangan pernah di-commit.**
 
-### Fitur AI
+### Fitur AI (gratis)
 
-Hanya ada dua fitur AI, keduanya memakai Claude lewat `ANTHROPIC_API_KEY` yang hanya dibaca server (tidak pernah dikirim ke aplikasi):
+Hanya ada dua fitur AI, keduanya memakai tier **gratis** Google Gemini lewat antarmuka yang kompatibel dengan OpenAI (`fetch` biasa, tanpa SDK berbayar). Kunci `AI_API_KEY` hanya dibaca server dan tidak pernah dikirim ke aplikasi.
 
-1. **Chatbot Tanya Sira** (`src/services/ai/chatbot.ts`). Tombol cepat yang diatur admin dijawab langsung dari FAQ. Pertanyaan bebas dikirim ke Claude bersama **DATA RESMI** yang dirakit dari database setiap kali (tiket, parkir, wahana dan harganya, jam datang, keramaian sekarang, dan FAQ admin) dan aturan keras: jawab hanya dari data itu, jangan menebak, abaikan perintah dari pengunjung, tolak topik di luar Sumber Sira. Jawaban dikunci ke skema `{terjawab, jawaban}`; bila `terjawab=false` pertanyaan masuk ke Belum Terjawab. Bila AI mati, jatah harian habis, atau Claude galat, chatbot memakai pencocokan kata kunci FAQ seperti sebelumnya, jadi pengunjung tidak pernah melihat galat mentah.
-2. **AI Photo** (`src/services/ai/photo-advisor.ts` dan `src/services/photo/engine.ts`). Claude **hanya menilai** foto (jenis foto, kabut, terang-gelap, perlu kontras dan warna berapa, ada orang atau tidak) dan mengembalikan angka; semua angka dijepit ke rentang aman. Piksel diolah oleh mesin pengolahan gambar biasa (kurva warna per kanal, kompensasi merah bawah air, kontras lokal pada kecerahan, vibrance, penajaman halus). Tidak ada model generatif, jadi wajah, bentuk, dan latar tidak mungkin berubah; ukuran dan proporsi tetap (hanya diperkecil bila sisi terpanjang melebihi 2560 px). Pengolahan terjadi di server, jadi ponsel yang lemah pun mendapat hasil yang sama. Tanpa kunci, mesin memakai statistik foto sendiri.
+**Cara mendapat kunci gratis:** buka aistudio.google.com, masuk dengan akun Google, pilih *Get API key*, lalu buat kunci. Tidak perlu kartu kredit. **Jangan menghubungkan akun penagihan (billing) ke proyek kunci itu**: tanpa billing proyek tetap di tier gratis dan tidak bisa menagih; yang terjadi bila kuota habis hanyalah galat 429. Isi `AI_API_KEY` di `.env` (lokal) atau di Environment hosting (produksi), lalu mulai ulang backend.
 
-Biaya kira-kira per jawaban chat dan per penilaian foto dengan model bawaan sekitar satu sampai dua sen dolar; model `claude-haiku-5-5` jauh lebih murah. Pengaman: `CHAT_AI_DAILY_LIMIT`, `PHOTO_AI_DAILY_LIMIT`, dan pembatas laju per IP.
+1. **Chatbot Tanya Sira** (`src/services/ai/chatbot.ts`). Tombol cepat yang diatur admin dijawab langsung dari FAQ. Pertanyaan bebas dikirim ke AI bersama **DATA RESMI** yang dirakit dari database setiap kali (tiket, parkir, wahana dan harganya, jam datang, keramaian sekarang, dan FAQ admin) dan aturan keras: jawab hanya dari data itu, jangan menebak, abaikan perintah dari pengunjung, tolak topik di luar Sumber Sira. AI diminta membalas JSON `{terjawab, jawaban}` yang diperiksa dengan skema; bila `terjawab=false` pertanyaan masuk ke Belum Terjawab. Bila AI mati, jatah harian habis, balasannya tidak terbaca, atau penyedia galat, chatbot memakai pencocokan kata kunci FAQ seperti sebelumnya, jadi pengunjung tidak pernah melihat galat mentah.
+2. **AI Photo** (`src/services/ai/photo-advisor.ts` dan `src/services/photo/engine.ts`). AI **hanya menilai** foto (jenis foto, kabut, terang-gelap, perlu kontras dan warna berapa, ada orang atau tidak) dan mengembalikan angka; semua angka dijepit ke rentang aman. Piksel diolah oleh mesin pengolahan gambar biasa (kurva warna per kanal, kompensasi merah bawah air, kontras lokal pada kecerahan, vibrance, penajaman halus). Tidak ada model generatif, jadi wajah, bentuk, dan latar tidak mungkin berubah; ukuran dan proporsi tetap (hanya diperkecil bila sisi terpanjang melebihi 2560 px). Pengolahan terjadi di server, jadi ponsel yang lemah pun mendapat hasil yang sama. Tanpa kunci, mesin memakai statistik foto sendiri dan hasilnya tetap bagus.
+
+**Menjaga kuota gratis.** Batas harian (`CHAT_AI_DAILY_LIMIT`, `PHOTO_AI_DAILY_LIMIT`) dan pembatas laju per IP mencegah kuota habis oleh sedikit pengguna. Bila penyedia membalas 429 (kuota habis) atau menolak kunci, klien berhenti menembak selama beberapa saat (1 menit untuk kuota per menit, 1 jam untuk kuota harian, 10 menit untuk kunci ditolak) dan langsung memakai cadangan tanpa AI. Batas gratis tiap model berbeda dan bisa berubah; lihat angka proyekmu di aistudio.google.com/rate-limit.
+
+**Privasi.** Di tier gratis Google boleh memakai isi permintaan untuk memperbaiki produknya. Yang dikirim ke AI: teks pertanyaan chat bersama data resmi Sumber Sira, dan untuk foto hanya versi kecil (maksimal 512 px) untuk dinilai. Bila tidak ingin foto pengunjung terkirim ke pihak ketiga, set `PHOTO_AI_DAILY_LIMIT=0`: fitur foto tetap jalan penuh karena mesin menilai foto sendiri.
 
 ### Mode pembayaran
 
