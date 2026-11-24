@@ -74,7 +74,7 @@ File `.env` berisi password database dan kunci rahasia. **Jangan pernah di-commi
 
 Hanya ada dua fitur AI, keduanya memakai tier **gratis** Google Gemini lewat antarmuka yang kompatibel dengan OpenAI (`fetch` biasa, tanpa SDK berbayar). Kunci `AI_API_KEY` hanya dibaca server dan tidak pernah dikirim ke aplikasi.
 
-**Cara mendapat kunci gratis:** buka aistudio.google.com, masuk dengan akun Google, pilih *Get API key*, lalu buat kunci. Tidak perlu kartu kredit. **Jangan menghubungkan akun penagihan (billing) ke proyek kunci itu**: tanpa billing proyek tetap di tier gratis dan tidak bisa menagih; yang terjadi bila kuota habis hanyalah galat 429. Isi `AI_API_KEY` di `.env` (lokal) atau di Environment hosting (produksi), lalu mulai ulang backend.
+**Cara mendapat kunci gratis:** buka aistudio.google.com, masuk dengan akun Google, pilih *Get API key*, lalu buat kunci. Tidak perlu kartu kredit. **Jangan menghubungkan akun penagihan (billing) ke proyek kunci itu**: tanpa billing proyek tetap di tier gratis dan tidak bisa menagih; yang terjadi bila kuota habis hanyalah galat 429. Isi `AI_API_KEY` di `.env` (lokal) atau di Environment hosting (produksi), lalu mulai ulang backend. Untuk memastikan AI benar-benar hidup, jalankan `npm run ai:cek`: perintah ini menguji kunci, chatbot, dan penilaian foto (memakai 3 panggilan dari kuota gratis) dan menjelaskan dengan bahasa biasa bila ada yang salah, mis. kunci salah salin, nama model keliru, atau kuota habis.
 
 1. **Chatbot Tanya Sira** (`src/services/ai/chatbot.ts`). Tombol cepat yang diatur admin dijawab langsung dari FAQ. Pertanyaan bebas dikirim ke AI bersama **DATA RESMI** yang dirakit dari database setiap kali (tiket, parkir, wahana dan harganya, jam datang, keramaian sekarang, dan FAQ admin) dan aturan keras: jawab hanya dari data itu, jangan menebak, abaikan perintah dari pengunjung, tolak topik di luar Sumber Sira. AI diminta membalas JSON `{terjawab, jawaban}` yang diperiksa dengan skema; bila `terjawab=false` pertanyaan masuk ke Belum Terjawab. Bila AI mati, jatah harian habis, balasannya tidak terbaca, atau penyedia galat, chatbot memakai pencocokan kata kunci FAQ seperti sebelumnya, jadi pengunjung tidak pernah melihat galat mentah.
 2. **AI Photo** (`src/services/ai/photo-advisor.ts` dan `src/services/photo/engine.ts`). AI **hanya menilai** foto (jenis foto, kabut, terang-gelap, perlu kontras dan warna berapa, ada orang atau tidak) dan mengembalikan angka; semua angka dijepit ke rentang aman. Piksel diolah oleh mesin pengolahan gambar biasa (kurva warna per kanal, kompensasi merah bawah air, kontras lokal pada kecerahan, vibrance, penajaman halus). Tidak ada model generatif, jadi wajah, bentuk, dan latar tidak mungkin berubah; ukuran dan proporsi tetap (hanya diperkecil bila sisi terpanjang melebihi 2560 px). Pengolahan terjadi di server, jadi ponsel yang lemah pun mendapat hasil yang sama. Tanpa kunci, mesin memakai statistik foto sendiri dan hasilnya tetap bagus.
@@ -214,8 +214,6 @@ src/
   utils/               Fungsi bantu tanpa state: pricing, time, seq, phone, limiters, errors
 docs/
   api.md               Dokumentasi lengkap API + contoh curl/PowerShell
-planning/
-  planning.md          Rencana kerja fase P0-P12 dan catatan asumsi
 scripts/
   demo-crowd.ts        Menambah/menghapus data keramaian demo (isDemo)
   smoke/               Uji end-to-end per fase + all.ts
