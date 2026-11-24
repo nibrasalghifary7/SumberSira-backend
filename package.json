@@ -11,7 +11,8 @@
     "db:apply": "tsx scripts/db-apply.ts",
     "seed": "tsx prisma/seed.ts",
     "seed:extra": "tsx prisma/seed-extra.ts",
-    "smoke": "tsx scripts/smoke/all.ts"
+    "smoke": "tsx scripts/smoke/all.ts",
+    "ai:cek": "tsx scripts/ai-check.ts"
   },
   "repository": {
     "type": "git",
