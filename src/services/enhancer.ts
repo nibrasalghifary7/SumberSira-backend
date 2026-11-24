@@ -1,23 +1,27 @@
-import sharp from "sharp";
+import { nilaiFoto } from "./ai/photo-advisor.js";
+import { perbaikiFoto, type Laporan } from "./photo/engine.js";
 
 /**
- * Antarmuka perbaikan gambar. Implementasi saat ini memakai sharp secara lokal
- * (tanpa layanan AI berbayar) dan bisa diganti layanan AI sungguhan nanti
- * lewat antarmuka yang sama.
+ * Perbaikan foto AI Photo Studio (fitur AI nomor 2).
+ *
+ * Alur: (1) AI Claude menilai foto bila kunci tersedia, (2) mesin pengolahan gambar menerapkan koreksi warna, kabut, kecerahan,
+ * kontras lokal, dan vibrance dengan angka dari penilaian itu atau dari statistik foto. Tidak ada gambar yang dibuat atau
+ * diubah oleh AI, jadi wajah, bentuk, dan latar tetap persis sama (lihat services/photo/engine.ts). Berjalan di server,
+ * jadi tidak bergantung pada kemampuan ponsel pengunjung.
  */
-export interface ImageEnhancer {
-  enhance(input: Buffer): Promise<Buffer>;
+export interface OpsiEnhance {
+  /** 0..100, bawaan 60 */
+  strength?: number;
 }
 
-export const sharpEnhancer: ImageEnhancer = {
-  async enhance(input: Buffer): Promise<Buffer> {
-    return sharp(input)
-      .rotate() // ikuti orientasi EXIF
-      .resize({ width: 2048, height: 2048, fit: "inside", withoutEnlargement: true })
-      .normalise()
-      .modulate({ brightness: 1.05, saturation: 1.2 })
-      .sharpen()
-      .jpeg({ quality: 88 })
-      .toBuffer();
+export interface ImageEnhancer {
+  enhance(input: Buffer, opsi?: OpsiEnhance): Promise<{ jpeg: Buffer; laporan: Laporan; olehAi: boolean }>;
+}
+
+export const autoEnhancer: ImageEnhancer = {
+  async enhance(input, opsi = {}) {
+    const saran = await nilaiFoto(input);
+    const { jpeg, laporan } = await perbaikiFoto(input, { kekuatan: opsi.strength, saran });
+    return { jpeg, laporan, olehAi: saran !== null };
   },
 };

@@ -19,6 +19,15 @@ const envSchema = z.object({
   MIDTRANS_CLIENT_KEY: z.string().default(""),
   STORAGE_DRIVER: z.enum(["local", "vercel-blob"]).default("local"),
   BLOB_READ_WRITE_TOKEN: z.string().default(""),
+  // Fitur AI (hanya dua: chatbot Tanya Sira dan perbaikan foto). Tanpa kunci, keduanya tetap jalan memakai cadangan
+  // tanpa AI: chatbot menjawab dari FAQ kata kunci, foto diperbaiki dengan pengolahan gambar otomatis.
+  ANTHROPIC_API_KEY: z.string().default(""),
+  // Model Claude untuk chatbot dan untuk membaca foto; ganti ke model yang lebih murah/cepat bila perlu (mis. claude-haiku-5-5).
+  CHAT_MODEL: z.string().default("claude-opus-5-5"),
+  PHOTO_AI_MODEL: z.string().default("claude-opus-5-5"),
+  // Batas panggilan AI per hari (WIB) supaya biaya tidak melonjak; lewat batas, fitur beralih ke cadangan tanpa AI. 0 = matikan AI.
+  CHAT_AI_DAILY_LIMIT: z.coerce.number().int().min(0).default(300),
+  PHOTO_AI_DAILY_LIMIT: z.coerce.number().int().min(0).default(200),
 }).superRefine((data, ctx) => {
   if (data.PAYMENT_MODE === "midtrans" && !data.MIDTRANS_SERVER_KEY) {
     ctx.addIssue({

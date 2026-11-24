@@ -4,11 +4,17 @@ import crypto from "node:crypto";
 import { db } from "../config/database.js";
 import { getStorageDriver } from "../services/storage/index.js";
 import { handleUpload, validateImageBuffer } from "../services/storage/upload.js";
-import { sharpEnhancer } from "../services/enhancer.js";
+import { autoEnhancer } from "../services/enhancer.js";
 import { aiPhotoLimiter, writeLimiter, publicLimiter } from "../utils/limiters.js";
-import { shareSchema } from "../models/ai-photo.model.js";
+import { shareSchema, strengthSchema } from "../models/ai-photo.model.js";
 
 export const aiPhotoRouter = Router();
+
+// Kekuatan perbaikan 0..100 dari kolom form; kosong atau tidak valid berarti bawaan (60).
+function bacaKekuatan(v: unknown): number | undefined {
+  const n = typeof v === "string" && v.trim() !== "" ? Number(v) : typeof v === "number" ? v : NaN;
+  return Number.isFinite(n) ? Math.min(100, Math.max(0, Math.round(n))) : undefined;
+}
 
 
 
@@ -45,10 +51,11 @@ aiPhotoRouter.post("/", aiPhotoLimiter, handleUpload, async (req, res) => {
       data: { originalUrl: uploadedOriginal.url },
     });
 
-    // Perbaikan gambar lokal (placeholder yang bisa diganti layanan AI sungguhan)
-    const resultBuffer = await sharpEnhancer.enhance(req.file.buffer);
+    // Perbaikan foto: AI menilai kondisi foto, mesin pengolahan gambar menerapkannya (tidak mengubah bentuk, wajah, atau latar)
+    const strength = bacaKekuatan(req.body?.strength);
+    const enhanced = await autoEnhancer.enhance(req.file.buffer, { strength });
 
-    const uploadedResult = await driver.put(resultKey, resultBuffer, "image/jpeg");
+    const uploadedResult = await driver.put(resultKey, enhanced.jpeg, "image/jpeg");
 
     await db.aiPhotoJob.update({
       where: { id: job.id },
@@ -64,6 +71,8 @@ aiPhotoRouter.post("/", aiPhotoLimiter, handleUpload, async (req, res) => {
       status: "done",
       originalUrl: uploadedOriginal.url,
       resultUrl: uploadedResult.url,
+      strength: strength ?? 60,
+      engine: enhanced.olehAi ? "ai" : "otomatis",
     });
   } catch (err) {
     console.error("Gagal memproses AI Photo:", err);
@@ -74,6 +83,43 @@ aiPhotoRouter.post("/", aiPhotoLimiter, handleUpload, async (req, res) => {
         data: { status: "failed", error: message.slice(0, 200) },
       })
       .catch(() => {});
+    res.status(422).json({ error: "PROCESSING_FAILED", id: job.id });
+  }
+});
+
+// POST /ai-photo/:id/strength (Publik): atur ulang kekuatan perbaikan dari foto asli yang sudah tersimpan (slider di aplikasi)
+aiPhotoRouter.post("/:id/strength", aiPhotoLimiter, async (req, res) => {
+  const parsed = strengthSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "VALIDATION", issues: parsed.error.issues });
+  }
+
+  const job = await db.aiPhotoJob.findUnique({ where: { id: req.params.id as string } });
+  if (!job) return res.status(404).json({ error: "NOT_FOUND" });
+  if (job.status !== "done" || !job.originalUrl) return res.status(409).json({ error: "INVALID_STATE" });
+
+  try {
+    // Foto asli diambil lagi dari penyimpanan (URL dibuat server sendiri saat unggah)
+    const asli = await fetch(job.originalUrl, { signal: AbortSignal.timeout(20_000) });
+    if (!asli.ok) throw new Error(`Foto asli tidak terbaca (${asli.status})`);
+    const buffer = Buffer.from(await asli.arrayBuffer());
+
+    const enhanced = await autoEnhancer.enhance(buffer, { strength: parsed.data.strength });
+    const driver = getStorageDriver();
+    const resultKey = `ai/${crypto.randomUUID()}-result.jpg`;
+    const uploaded = await driver.put(resultKey, enhanced.jpeg, "image/jpeg");
+    await db.aiPhotoJob.update({ where: { id: job.id }, data: { resultUrl: uploaded.url, resultKey } });
+
+    res.json({
+      id: job.id,
+      status: "done",
+      originalUrl: job.originalUrl,
+      resultUrl: uploaded.url,
+      strength: parsed.data.strength,
+      engine: enhanced.olehAi ? "ai" : "otomatis",
+    });
+  } catch (err) {
+    console.error("Gagal mengatur ulang kekuatan AI Photo:", err);
     res.status(422).json({ error: "PROCESSING_FAILED", id: job.id });
   }
 });
