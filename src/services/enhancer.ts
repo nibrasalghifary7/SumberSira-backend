@@ -4,7 +4,7 @@ import { perbaikiFoto, type Laporan } from "./photo/engine.js";
 /**
  * Perbaikan foto AI Photo Studio (fitur AI nomor 2).
  *
- * Alur: (1) AI Claude menilai foto bila kunci tersedia, (2) mesin pengolahan gambar menerapkan koreksi warna, kabut, kecerahan,
+ * Alur: (1) AI menilai foto bila kunci tersedia, (2) mesin pengolahan gambar menerapkan koreksi warna, kabut, kecerahan,
  * kontras lokal, dan vibrance dengan angka dari penilaian itu atau dari statistik foto. Tidak ada gambar yang dibuat atau
  * diubah oleh AI, jadi wajah, bentuk, dan latar tetap persis sama (lihat services/photo/engine.ts). Berjalan di server,
  * jadi tidak bergantung pada kemampuan ponsel pengunjung.

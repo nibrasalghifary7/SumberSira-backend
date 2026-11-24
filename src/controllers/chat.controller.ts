@@ -34,7 +34,7 @@ const JAWABAN_BELUM_TAHU = "Maaf, aku belum punya jawabannya. Pertanyaanmu sudah
 // POST /chat (Publik)
 // 1) Tombol jawaban cepat (teks persis sama dengan tombol yang diatur admin) dijawab langsung dengan jawaban FAQ admin,
 //    tanpa AI: cepat, gratis, dan pasti sesuai yang ditulis admin.
-// 2) Pertanyaan lain dijawab AI (Claude) yang hanya boleh memakai data resmi: harga, wahana, jam, keramaian, dan FAQ admin.
+// 2) Pertanyaan lain dijawab AI yang hanya boleh memakai data resmi: harga, wahana, jam, keramaian, dan FAQ admin.
 //    Bila AI tidak tahu, pertanyaan dicatat ke daftar Belum Terjawab supaya admin bisa menambah FAQ.
 // 3) Tanpa AI (belum ada kunci, jatah harian habis, atau galat): cadangan pencocokan kata kunci FAQ seperti sebelumnya.
 chatRouter.post("/", writeLimiter, async (req, res) => {

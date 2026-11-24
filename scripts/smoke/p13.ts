@@ -4,23 +4,25 @@ import { config } from "../../src/config/index.js";
 import { setAiClientForTests, type AiClient } from "../../src/services/ai/client.js";
 import { batasChat, buatPengetahuan, susunPesan } from "../../src/services/ai/chatbot.js";
 
-// P13: chatbot AI Tanya Sira. Jalur AI diuji dengan klien Claude tiruan (tanpa kunci, tanpa biaya): yang diperiksa adalah
-// apa yang dikirim ke Claude (data resmi, aturan, riwayat), bagaimana jawabannya diolah, dan cadangan bila AI gagal.
+// P13: chatbot AI Tanya Sira. Jalur AI diuji dengan klien AI tiruan (tanpa kunci, tanpa memakai kuota gratis): yang diperiksa
+// adalah apa yang dikirim ke AI (data resmi, aturan, riwayat), bagaimana balasannya diolah, dan cadangan bila AI gagal.
 
-type Panggilan = { system: string; messages: Array<{ role: string; content: string }>; model: string; effort?: string };
+type Panggilan = { system: string; messages: Array<{ role: string; content: string }>; model: string };
 
-function klienTiruan(balasan: () => unknown) {
+// balasan() mengembalikan teks mentah seperti yang dikirim model (biasanya JSON).
+function klienTiruan(balasan: () => string) {
   const panggilan: Panggilan[] = [];
-  const klien = {
-    messages: {
-      parse: async (p: any) => {
-        panggilan.push({ system: p.system, messages: p.messages, model: p.model, effort: p.output_config?.effort });
-        return balasan();
-      },
+  const klien: AiClient = {
+    chat: async (req) => {
+      const [sistem, ...sisa] = req.messages;
+      panggilan.push({ system: String(sistem.content), messages: sisa as Panggilan["messages"], model: req.model });
+      return balasan();
     },
-  } as unknown as AiClient;
+  };
   return { klien, panggilan };
 }
+
+const jawab = (terjawab: boolean, jawaban: string) => JSON.stringify({ terjawab, jawaban });
 
 const json = (cookie: string, method: string, body?: unknown) => ({
   method,
@@ -58,7 +60,7 @@ async function run() {
 
     // ---- Tanpa AI (tidak ada klien): cadangan kata kunci FAQ ----
     setAiClientForTests(null);
-    const tanpaKunci = !config.ANTHROPIC_API_KEY;
+    const tanpaKunci = !config.AI_API_KEY;
     if (tanpaKunci) {
       const st = await request(baseUrl, "/admin/faq/ai-status", { headers: { Cookie: admin } });
       check("Status AI: nonaktif tanpa kunci", st.status === 200 && st.body.enabled === false);
@@ -73,13 +75,13 @@ async function run() {
     const awalTerpakai = batasChat.terpakai();
 
     // Tombol cepat dijawab langsung dari FAQ, AI tidak dipanggil
-    const t1 = klienTiruan(() => ({ stop_reason: "end_turn", parsed_output: { terjawab: true, jawaban: "tidak boleh dipakai" } }));
+    const t1 = klienTiruan(() => jawab(true, "tidak boleh dipakai"));
     setAiClientForTests(t1.klien);
     const dariTombol = await request(baseUrl, "/chat", json("", "POST", { message: "smokeunik" }));
     check("Tombol cepat dijawab FAQ admin tanpa memanggil AI", dariTombol.body.source === "faq" && String(dariTombol.body.answer).includes("[SMOKE]") && t1.panggilan.length === 0);
 
     // Pertanyaan bebas dijawab AI dan diberi data resmi
-    const t2 = klienTiruan(() => ({ stop_reason: "end_turn", parsed_output: { terjawab: true, jawaban: "Tiket Rp5.000 per orang ya." } }));
+    const t2 = klienTiruan(() => jawab(true, "Tiket Rp5.000 per orang ya."));
     setAiClientForTests(t2.klien);
     const bebas = await request(baseUrl, "/chat", json("", "POST", {
       message: "kalau berdua pakai motor jadinya berapa?",
@@ -87,7 +89,8 @@ async function run() {
     }));
     check("Pertanyaan bebas dijawab AI", bebas.status === 200 && bebas.body.source === "ai" && bebas.body.matched === true && bebas.body.answer.includes("Rp5.000"));
     const p = t2.panggilan[0];
-    check("Model dan usaha sesuai konfigurasi", p.model === config.CHAT_MODEL && p.effort === "low");
+    check("Model sesuai konfigurasi", p.model === config.CHAT_MODEL);
+    check("Prompt meminta balasan JSON terjawab dan jawaban", p.system.includes('"terjawab"') && p.system.includes('"jawaban"'));
     check("Prompt memuat aturan anti-mengarang", p.system.includes("HANYA dari bagian DATA RESMI") && p.system.includes("terjawab=false"));
     check("Data resmi memuat harga tiket dan parkir", p.system.includes("Tiket masuk: Rp") && p.system.includes("Parkir: motor Rp"));
     check("Data resmi memuat FAQ admin", p.system.includes("smokeunik") && p.system.includes("[SMOKE]"));
@@ -96,36 +99,46 @@ async function run() {
     check("Riwayat dimulai dari pengunjung dan berselang-seling", p.messages[0].role === "user" && p.messages.every((m, i) => i === 0 || m.role !== p.messages[i - 1].role));
 
     // AI bilang tidak tahu: dicatat untuk admin
-    const t3 = klienTiruan(() => ({ stop_reason: "end_turn", parsed_output: { terjawab: false, jawaban: "Aku belum punya infonya, sudah dicatat untuk pengelola ya." } }));
+    const t3 = klienTiruan(() => jawab(false, "Aku belum punya infonya, sudah dicatat untuk pengelola ya."));
     setAiClientForTests(t3.klien);
     const tidakTahu = await request(baseUrl, "/chat", json("", "POST", { message: "[SMOKE] ada diskon pelajar?" }));
     check("AI tidak tahu: matched false dan dicatat ke admin", tidakTahu.body.matched === false && tidakTahu.body.source === "ai" && (await db.unansweredQuestion.count({ where: { question: "[SMOKE] ada diskon pelajar?" } })) === 1);
 
     // Jatah harian: setelah habis, beralih ke cadangan
-    const t4 = klienTiruan(() => ({ stop_reason: "end_turn", parsed_output: { terjawab: true, jawaban: "x" } }));
+    const t4 = klienTiruan(() => jawab(true, "x"));
     setAiClientForTests(t4.klien);
     config.CHAT_AI_DAILY_LIMIT = batasChat.terpakai();
     const lewat = await request(baseUrl, "/chat", json("", "POST", { message: "zzsmokeunikzz" }));
     check("Jatah AI habis: cadangan FAQ dipakai, AI tidak dipanggil", lewat.body.source === "faq" && t4.panggilan.length === 0);
     config.CHAT_AI_DAILY_LIMIT = batasAwal;
 
-    // Galat dari Claude tidak membuat 500
-    const rusak = { messages: { parse: async () => { throw new Error("jaringan putus"); } } } as unknown as AiClient;
+    // Galat dari penyedia AI tidak membuat 500
+    const rusak: AiClient = { chat: async () => { throw new Error("jaringan putus"); } };
     setAiClientForTests(rusak);
     const jatahSebelum = batasChat.terpakai();
     const galat = await request(baseUrl, "/chat", json("", "POST", { message: "zzsmokeunikzz" }));
-    check("Claude galat: tetap 200 dengan cadangan FAQ", galat.status === 200 && galat.body.source === "faq");
+    check("AI galat: tetap 200 dengan cadangan FAQ", galat.status === 200 && galat.body.source === "faq");
     check("Jatah dikembalikan saat panggilan gagal", batasChat.terpakai() === jatahSebelum);
 
-    // Claude menolak (refusal) atau keluaran tak terurai: cadangan
-    const tolak = klienTiruan(() => ({ stop_reason: "refusal", parsed_output: null }));
-    setAiClientForTests(tolak.klien);
+    // Balasan bukan JSON (model menolak atau melantur), JSON tanpa kolom wajib, atau jawaban kosong: cadangan, tidak ditebak
+    const bukanJson = klienTiruan(() => "Maaf, saya tidak bisa membantu soal itu.");
+    setAiClientForTests(bukanJson.klien);
     const ditolak = await request(baseUrl, "/chat", json("", "POST", { message: "zzsmokeunikzz" }));
-    check("Refusal: cadangan FAQ", ditolak.status === 200 && ditolak.body.source === "faq");
-    const kosong = klienTiruan(() => ({ stop_reason: "end_turn", parsed_output: null }));
-    setAiClientForTests(kosong.klien);
-    const takTerurai = await request(baseUrl, "/chat", json("", "POST", { message: "zzsmokeunikzz" }));
-    check("Keluaran tak terurai: cadangan FAQ", takTerurai.status === 200 && takTerurai.body.source === "faq");
+    check("Balasan bukan JSON: cadangan FAQ", ditolak.status === 200 && ditolak.body.source === "faq" && bukanJson.panggilan.length === 1);
+    const takLengkap = klienTiruan(() => JSON.stringify({ jawaban: "tanpa kolom terjawab" }));
+    setAiClientForTests(takLengkap.klien);
+    const t5 = await request(baseUrl, "/chat", json("", "POST", { message: "zzsmokeunikzz" }));
+    check("JSON tanpa kolom terjawab: cadangan FAQ", t5.status === 200 && t5.body.source === "faq");
+    const jawabanKosong = klienTiruan(() => jawab(true, "   "));
+    setAiClientForTests(jawabanKosong.klien);
+    const t6 = await request(baseUrl, "/chat", json("", "POST", { message: "zzsmokeunikzz" }));
+    check("Jawaban kosong: cadangan FAQ", t6.status === 200 && t6.body.source === "faq");
+
+    // Model sering membungkus JSON dengan pagar kode atau menulis true sebagai teks: tetap terbaca
+    const berpagar = klienTiruan(() => 'Tentu!\n```json\n{"terjawab": "true", "jawaban": "Buka pukul 08.00."}\n```');
+    setAiClientForTests(berpagar.klien);
+    const t7 = await request(baseUrl, "/chat", json("", "POST", { message: "[SMOKE] kapan buka?" }));
+    check("JSON berpagar kode dan true sebagai teks tetap terbaca", t7.body.source === "ai" && t7.body.matched === true && t7.body.answer === "Buka pukul 08.00.", JSON.stringify(t7.body));
 
     // Status AI untuk admin
     const st2 = await request(baseUrl, "/admin/faq/ai-status", { headers: { Cookie: admin } });
@@ -134,7 +147,7 @@ async function run() {
 
     // ---- Unit: pengetahuan dan penyusunan pesan ----
     const pengetahuan = await buatPengetahuan();
-    check("Pengetahuan tidak memuat rahasia (kunci, hash, sesi)", !/ANTHROPIC|passwordHash|tokenHash|DATABASE_URL/i.test(pengetahuan));
+    check("Pengetahuan tidak memuat rahasia (kunci, hash, sesi)", !/API_KEY|passwordHash|tokenHash|DATABASE_URL/i.test(pengetahuan));
     const pesan = susunPesan([{ role: "assistant", text: "pembuka" }, { role: "user", text: "a" }, { role: "user", text: "b" }, { role: "assistant", text: "c" }], "d");
     check("Pesan: pembuka asisten dibuang, peran sama digabung, berakhir di pengunjung", pesan[0].role === "user" && pesan[0].content === "a\nb" && pesan[pesan.length - 1].role === "user");
 

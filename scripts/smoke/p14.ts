@@ -9,7 +9,7 @@ import { MAKS_SISI, perbaikiFoto, tebakMode, hitungParameter } from "../../src/s
 // P14: AI Photo Studio. Dua hal diuji:
 //  (1) mesin perbaikan TIDAK mengubah bentuk: ukuran dan proporsi sama, tepi-tepi objek tetap di tempatnya (korelasi tepi tinggi),
 //      yang berubah hanya warna, kabut, kecerahan, dan kontras;
-//  (2) endpoint: kolom strength, atur ulang kekuatan dari foto asli, dan penilaian AI (klien Claude tiruan) yang dijepit aman.
+//  (2) endpoint: kolom strength, atur ulang kekuatan dari foto asli, dan penilaian AI (klien AI tiruan) yang dijepit aman.
 
 // Foto sintetis ala bawah air: gradasi biru-hijau yang miskin merah, kabut, "perenang" berkulit, batu gelap, dan garis cahaya.
 async function fotoBawahAir(w: number, h: number): Promise<Buffer> {
@@ -149,7 +149,7 @@ async function run() {
     setAiClientForTests(null);
     const r1 = await request(baseUrl, "/ai-photo", form(foto, { strength: "30" }));
     check("POST /ai-photo 201 dengan kolom strength", r1.status === 201 && r1.body.strength === 30 && r1.body.status === "done");
-    if (!config.ANTHROPIC_API_KEY) check("Tanpa kunci AI: mesin otomatis dipakai", r1.body.engine === "otomatis");
+    if (!config.AI_API_KEY) check("Tanpa kunci AI: mesin otomatis dipakai", r1.body.engine === "otomatis");
     const job1 = await db.aiPhotoJob.findUnique({ where: { id: r1.body.id } });
     if (job1?.originalKey) kunci.push(job1.originalKey);
     if (job1?.resultKey) kunci.push(job1.resultKey);
@@ -171,23 +171,39 @@ async function run() {
     check("Bukan gambar ditolak 415", (await request(baseUrl, "/ai-photo", form(Buffer.from("bukan gambar tetapi cukup panjang untuk lolos")))).status === 415);
 
     // Penilaian AI (klien tiruan): gambar dikirim sebagai blok image, hasil dijepit
-    const panggilan: any[] = [];
-    const tiruan = { messages: { parse: async (p: any) => { panggilan.push(p); return { stop_reason: "end_turn", parsed_output: { jenis: "bawah-air", kabut: 7, eksposur: -9, kontras: 0.5, warna: 0.5, ada_kulit: true } }; } } } as unknown as AiClient;
+    const panggilan: Array<Parameters<AiClient["chat"]>[0]> = [];
+    // angka di luar rentang sengaja dikirim; balasan dibungkus pagar kode dan sebagian angka berupa teks seperti ulah model sungguhan
+    const tiruan: AiClient = { chat: async (req) => { panggilan.push(req); return '```json\n{"jenis": "bawah air", "kabut": 7, "eksposur": "-9", "kontras": 0.5, "warna": 0.5, "ada_kulit": true}\n```'; } };
     setAiClientForTests(tiruan);
     const r3 = await request(baseUrl, "/ai-photo", form(foto, { strength: "70" }));
     check("Dengan AI: engine ai dan 201", r3.status === 201 && r3.body.engine === "ai");
-    check("Claude menerima foto sebagai gambar dan instruksi tidak mengubah isi", panggilan.length === 1 && panggilan[0].messages[0].content[0].type === "image" && String(panggilan[0].system).includes("harus tetap sama"));
+    const isiUser = panggilan[0]?.messages[1]?.content;
+    const bagianGambar = Array.isArray(isiUser) ? isiUser.find((b) => b.type === "image_url") : undefined;
+    check("AI menerima foto sebagai gambar JPEG kecil dan instruksi tidak mengubah isi", panggilan.length === 1 && !!bagianGambar && bagianGambar.type === "image_url" && bagianGambar.image_url.url.startsWith("data:image/jpeg;base64,") && String(panggilan[0].messages[0].content).includes("harus tetap sama"));
+    if (bagianGambar && bagianGambar.type === "image_url") {
+      const dikirim = await sharp(Buffer.from(bagianGambar.image_url.url.split(",")[1], "base64")).metadata();
+      check("Gambar yang dikirim ke AI dikecilkan (maks 512 px)", Math.max(dikirim.width ?? 0, dikirim.height ?? 0) <= 512);
+    }
+    check("Model penilai sesuai konfigurasi", panggilan[0]?.model === config.PHOTO_AI_MODEL);
     const job3 = await db.aiPhotoJob.findUnique({ where: { id: r3.body.id } });
     if (job3?.originalKey) kunci.push(job3.originalKey);
     if (job3?.resultKey) kunci.push(job3.resultKey);
 
     // AI galat: foto tetap diperbaiki dengan statistik
-    setAiClientForTests({ messages: { parse: async () => { throw new Error("putus"); } } } as unknown as AiClient);
+    setAiClientForTests({ chat: async () => { throw new Error("putus"); } });
     const r4 = await request(baseUrl, "/ai-photo", form(foto));
     check("AI galat: foto tetap diproses dengan mesin otomatis", r4.status === 201 && r4.body.engine === "otomatis");
     const job4 = await db.aiPhotoJob.findUnique({ where: { id: r4.body.id } });
     if (job4?.originalKey) kunci.push(job4.originalKey);
     if (job4?.resultKey) kunci.push(job4.resultKey);
+
+    // Balasan AI bukan JSON: foto tetap diperbaiki dengan statistik
+    setAiClientForTests({ chat: async () => "Fotonya bagus sekali!" });
+    const r5 = await request(baseUrl, "/ai-photo", form(foto));
+    check("Balasan AI bukan JSON: mesin otomatis dipakai", r5.status === 201 && r5.body.engine === "otomatis");
+    const job5 = await db.aiPhotoJob.findUnique({ where: { id: r5.body.id } });
+    if (job5?.originalKey) kunci.push(job5.originalKey);
+    if (job5?.resultKey) kunci.push(job5.resultKey);
 
     console.log("=== Seluruh Pemeriksaan P14 LULUS ===");
   } finally {

@@ -19,15 +19,21 @@ const envSchema = z.object({
   MIDTRANS_CLIENT_KEY: z.string().default(""),
   STORAGE_DRIVER: z.enum(["local", "vercel-blob"]).default("local"),
   BLOB_READ_WRITE_TOKEN: z.string().default(""),
-  // Fitur AI (hanya dua: chatbot Tanya Sira dan perbaikan foto). Tanpa kunci, keduanya tetap jalan memakai cadangan
-  // tanpa AI: chatbot menjawab dari FAQ kata kunci, foto diperbaiki dengan pengolahan gambar otomatis.
-  ANTHROPIC_API_KEY: z.string().default(""),
-  // Model Claude untuk chatbot dan untuk membaca foto; ganti ke model yang lebih murah/cepat bila perlu (mis. claude-haiku-5-5).
-  CHAT_MODEL: z.string().default("claude-opus-5-5"),
-  PHOTO_AI_MODEL: z.string().default("claude-opus-5-5"),
-  // Batas panggilan AI per hari (WIB) supaya biaya tidak melonjak; lewat batas, fitur beralih ke cadangan tanpa AI. 0 = matikan AI.
-  CHAT_AI_DAILY_LIMIT: z.coerce.number().int().min(0).default(300),
-  PHOTO_AI_DAILY_LIMIT: z.coerce.number().int().min(0).default(200),
+  // Fitur AI (hanya dua: chatbot Tanya Sira dan perbaikan foto), memakai tier GRATIS Google Gemini lewat antarmuka
+  // yang kompatibel dengan OpenAI. Tanpa kunci, keduanya tetap jalan memakai cadangan tanpa AI: chatbot menjawab dari
+  // FAQ kata kunci, foto diperbaiki dengan pengolahan gambar otomatis. Jangan hubungkan akun penagihan ke kuncinya.
+  AI_API_KEY: z.string().default(""),
+  // Alamat API. Bawaan Gemini; penyedia gratis lain yang kompatibel (mis. Groq, OpenRouter) cukup ganti alamat, kunci, dan model.
+  AI_BASE_URL: z.string().url().default("https://generativelanguage.googleapis.com/v1beta/openai"),
+  // Model untuk chatbot dan untuk membaca foto (gemini-3.5-flash-lite gratis dan paling longgar kuotanya).
+  CHAT_MODEL: z.string().default("gemini-3.5-flash-lite"),
+  PHOTO_AI_MODEL: z.string().default("gemini-3.5-flash-lite"),
+  // Opsional: tingkat berpikir model (minimal, low, medium, high). Kosong = bawaan model; kosongkan bila penyedia menolaknya.
+  AI_REASONING_EFFORT: z.string().default(""),
+  // Batas panggilan AI per hari (WIB) supaya kuota gratis tidak habis oleh sedikit pengguna; lewat batas, fitur beralih
+  // ke cadangan tanpa AI. 0 = matikan AI.
+  CHAT_AI_DAILY_LIMIT: z.coerce.number().int().min(0).default(150),
+  PHOTO_AI_DAILY_LIMIT: z.coerce.number().int().min(0).default(100),
 }).superRefine((data, ctx) => {
   if (data.PAYMENT_MODE === "midtrans" && !data.MIDTRANS_SERVER_KEY) {
     ctx.addIssue({
