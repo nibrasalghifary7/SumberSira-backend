@@ -32,7 +32,10 @@ export const ruleBasedInsightGenerator: InsightGenerator = {
       );
     }
 
-    if (input.rating < 4.0) {
+    // Rating 0,0 tanpa ulasan bukan nilai buruk, hanya belum ada data; jangan disamakan dengan rating rendah.
+    if (input.reviewCount === 0) {
+      out.push("Belum ada ulasan. Ajak pengunjung menulis ulasan lewat menu Ulasan & Rating di aplikasi supaya mutu layanan bisa dipantau.");
+    } else if (input.rating < 4.0) {
       out.push(
         `Rata-rata rating ${input.rating.toFixed(1)} masih di bawah 4,0. Periksa ulasan terbaru dan tindak lanjuti keluhan pengunjung.`
       );
