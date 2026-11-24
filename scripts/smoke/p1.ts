@@ -112,7 +112,7 @@ async function run() {
       const uniqueResults = new Set(results);
       check("20 hasil nomor unik berurutan", uniqueResults.size === 20);
       const sorted = [...results].sort((a, b) => a - b);
-      check("Nomor pertama adalah initial (100)", sorted[0] === 100);
+      check("Nomor pertama adalah initial (100)", sorted[0] === 100, `hasil: ${sorted.join(",")}`);
       check("Nomor terakhir adalah 119", sorted[19] === 119);
     } finally {
       // Bersihkan data smoke di database

@@ -118,6 +118,7 @@ File `.env` berisi password database dan kunci rahasia. **Jangan pernah di-commi
 | `npm run seed` | Data awal: akun demo, 8 wahana, 4 slot jam |
 | `npm run seed:extra` | Contoh harga, ulasan, dan FAQ (hanya kalau tabel masih kosong) |
 | `npm run smoke` | Menjalankan seluruh smoke test P0–P12 secara berurutan |
+| `npm run db:apply` | Menerapkan migrasi lewat driver `pg` (pengganti `prisma migrate deploy` bila Prisma CLI menjawab P1001 di jaringan IPv6 yang macet). Dengan `DB_SCHEMA=nama` migrasi masuk ke schema terpisah |
 
 Tidak ada script `build`: proyek ini dijalankan langsung dari TypeScript dengan `tsx`, jadi deploy tidak perlu langkah kompilasi.
 
@@ -140,6 +141,17 @@ npx tsx scripts/smoke/p8.ts      # satu fase saja
 ```
 
 Syarat: `.env` terisi `DATABASE_URL`. Mode pembayaran boleh `simulation` (bawaan) — smoke test tidak memakai Midtrans sungguhan.
+
+**Menguji tanpa menyentuh data asli.** Smoke test membersihkan data berawalan `[SMOKE]`, tetapi nomor urut tiket dan booking (tabel `Counter`) tetap naik, dan beberapa fase mengubah harga sementara. Untuk database yang dipakai bersama, jalankan di schema terpisah:
+
+```
+DB_SCHEMA=dean_dev npm run db:apply      # buat schema uji dan terapkan semua migrasi
+DB_SCHEMA=dean_dev npm run seed          # akun demo, wahana, slot jam
+DB_SCHEMA=dean_dev npm run seed:extra    # harga dan FAQ contoh
+DB_SCHEMA=dean_dev npm run smoke         # smoke test + server dev pun boleh dijalankan dengan DB_SCHEMA yang sama
+```
+
+Setelah selesai, hapus schema ujinya: `DROP SCHEMA dean_dev CASCADE;`. Jalankan `smoke` pada schema yang baru dibuat; sebagian pemeriksaan (misalnya nomor urut awal) mengandaikan database yang bersih.
 
 ## Keamanan
 
