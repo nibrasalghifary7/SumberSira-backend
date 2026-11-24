@@ -27,7 +27,7 @@ Dokumentasi lengkap endpoint (body, contoh respons, kode galat, contoh curl/Powe
 - **Galeri foto** — unggah dengan verifikasi magic bytes (JPEG/PNG/WebP, maks 4 MB), moderasi admin; driver penyimpanan `local` atau `vercel-blob`.
 - **AI Photo** (fitur AI 1) — perbaikan foto pengunjung seperti Auto Color, Dehaze, dan Vibrance di Photoshop: warna bawah air, kabut, kecerahan, kontras lokal. **Tidak generatif**: tidak ada objek, wajah, atau latar yang digeser atau diubah (lihat bagian AI di bawah). Ada pengatur kekuatan 0 sampai 100 dan bisa dibagikan ke galeri.
 - **Chatbot Tanya Sira & FAQ** (fitur AI 2) — tombol jawaban cepat dan FAQ dijawab persis tulisan admin; pertanyaan bebas dijawab AI hanya dari data resmi (harga, wahana, keramaian, FAQ); yang tidak diketahui dicatat ke daftar Belum Terjawab. Admin mengatur FAQ dan tombol cepat dari dashboard.
-- **AI Insight** — saran operasional harian untuk admin berbasis aturan melalui antarmuka `InsightGenerator`.
+- **Insight** — saran operasional harian untuk admin berbasis aturan (bukan AI) melalui antarmuka `InsightGenerator`.
 - **Keamanan** — helmet, CORS ketat di produksi, rate limiting per endpoint, hash password scrypt, cookie `HttpOnly`/`SameSite`/`Secure` di produksi.
 
 ## Teknologi
@@ -276,7 +276,7 @@ Database Neon dipakai bersama, jadi data yang diubah satu orang terlihat oleh se
 - [x] P7 Chatbot FAQ + pencatatan pertanyaan belum terjawab
 - [x] P8 Galeri foto (moderasi admin, magic bytes, local/vercel-blob)
 - [x] P9 AI Photo (perbaikan foto dengan sharp, bisa dibagikan ke galeri)
-- [x] P10 AI Insight (saran operasional berbasis aturan)
+- [x] P10 Insight (saran operasional berbasis aturan)
 - [x] P11 Manajemen akun petugas/admin + ubah password
 - [x] P12 Penutup: dokumentasi lengkap, smoke test seluruh fase, kesiapan deploy
 - [ ] Deploy backend dan web admin ke hosting produksi

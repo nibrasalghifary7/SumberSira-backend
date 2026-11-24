@@ -1,5 +1,5 @@
 /**
- * AI Insight berbasis aturan (bukan LLM), melalui antarmuka InsightGenerator
+ * Insight berbasis aturan (bukan AI maupun LLM), melalui antarmuka InsightGenerator
  * supaya bisa diganti layanan LLM sungguhan nanti.
  */
 
