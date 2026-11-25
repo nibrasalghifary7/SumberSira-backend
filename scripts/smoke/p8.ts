@@ -52,7 +52,7 @@ async function run() {
       headers: { Cookie: adminCookie },
     });
     check("Admin GET /admin/gallery 200", rAdminList.status === 200);
-    const created = rAdminList.body?.find((p: any) => p.id === photoId);
+    const created = rAdminList.body?.items?.find((p: any) => p.id === photoId);
     check("Foto uji ada di daftar admin", created !== undefined);
     check("storageKey diawali gallery/", typeof created?.storageKey === "string" && created.storageKey.startsWith("gallery/"));
     uploadedKeys.push(created.storageKey);
@@ -128,7 +128,7 @@ async function run() {
       headers: { Cookie: adminCookie },
     });
     check("Saring status=pending tidak memuat foto approved",
-      !rPendingOnly.body?.some((p: any) => p.id === photoId));
+      !rPendingOnly.body?.items?.some((p: any) => p.id === photoId));
 
     // 10. DELETE menghapus baris dan berkas
     const rDelete = await request(baseUrl, `/admin/gallery/${photoId}`, {
@@ -149,7 +149,7 @@ async function run() {
       headers: { Cookie: adminCookie },
     });
     check("Baris foto terhapus dari daftar admin",
-      !rAfterDelete.body?.some((p: any) => p.id === photoId));
+      !rAfterDelete.body?.items?.some((p: any) => p.id === photoId));
 
     console.log("=== Seluruh Pemeriksaan P8 LULUS ===");
   } finally {

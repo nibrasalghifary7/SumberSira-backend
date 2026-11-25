@@ -19,3 +19,9 @@ Ada yang ingin kamu ketahui seputar Sumber Sira? Yuk, tanyakan apa saja. Aku sia
 11. beranda: kasih logo nya donk di sebelah teks title paling awal Sumber Sira, disebelah kiri nya aja
 
 B. ADMIN
+
+1. di menu tiket & check in: ada button export, nah aku bingung fitur nya buat apa, button nya pun gabisa di diklik, kalo ga guna fungsi nya hapus saja
+2. di tiket dan check in, buatkan simulasi scan nya dock, button nya gabisa dipencet, (sementara diemin dulu aja)
+3. menu insight hapus aja
+4. untuk semua logo/icon, menyesuaikan lagi sama seperti yang wahana mobile
+5. fitur search di semua menu belum berfungsi

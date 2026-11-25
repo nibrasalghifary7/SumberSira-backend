@@ -102,7 +102,9 @@ galleryRouter.get("/", publicLimiter, async (req, res) => {
   );
 });
 
-// GET /admin/gallery?status= (Admin)
+// GET /admin/gallery?status=&page=&limit= (Admin)
+// Data galeri bisa sangat banyak, jadi hanya satu halaman yang dikirim beserta
+// jumlah total dan rekap status untuk kartu ringkasan.
 adminGalleryRouter.get("/", requireAuth, requireRole("admin"), async (req, res) => {
   const statusQuery = req.query.status as PhotoStatus | undefined;
   const where: any = {};
@@ -110,13 +112,24 @@ adminGalleryRouter.get("/", requireAuth, requireRole("admin"), async (req, res) 
     where.status = statusQuery;
   }
 
-  const photos = await db.galleryPhoto.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-  });
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
 
-  res.json(
-    photos.map((p) => ({
+  const [photos, total, pending, approved, rejected] = await Promise.all([
+    db.galleryPhoto.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      skip: (page - 1) * limit,
+    }),
+    db.galleryPhoto.count({ where }),
+    db.galleryPhoto.count({ where: { status: "pending" } }),
+    db.galleryPhoto.count({ where: { status: "approved" } }),
+    db.galleryPhoto.count({ where: { status: "rejected" } }),
+  ]);
+
+  res.json({
+    items: photos.map((p) => ({
       id: p.id,
       url: p.url,
       storageKey: p.storageKey,
@@ -127,8 +140,12 @@ adminGalleryRouter.get("/", requireAuth, requireRole("admin"), async (req, res) 
       status: p.status,
       createdAt: p.createdAt.toISOString(),
       reviewedAt: p.reviewedAt ? p.reviewedAt.toISOString() : null,
-    }))
-  );
+    })),
+    total,
+    page,
+    limit,
+    counts: { all: pending + approved + rejected, pending, approved, rejected },
+  });
 });
 
 // PATCH /admin/gallery/:id (Admin)
