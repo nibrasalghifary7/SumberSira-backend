@@ -69,7 +69,7 @@ async function run() {
     const rAdminGet = await request(baseUrl, "/admin/reviews", {
       headers: { Cookie: adminCookie },
     });
-    check("Admin GET /admin/reviews 200", rAdminGet.status === 200 && Array.isArray(rAdminGet.body));
+    check("Admin GET /admin/reviews 200", rAdminGet.status === 200 && Array.isArray(rAdminGet.body?.items));
 
     // Admin DELETE /admin/reviews/:id -> 200
     const rAdminDelete = await request(baseUrl, `/admin/reviews/${createdReview.id}`, {

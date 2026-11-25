@@ -73,17 +73,33 @@ reviewsRouter.post("/", writeLimiter, async (req, res) => {
 });
 
 // GET /admin/reviews (Admin)
-adminReviewsRouter.get("/", requireAuth, requireRole("admin"), async (_req, res) => {
-  const reviews = await db.review.findMany({
-    orderBy: { createdAt: "desc" },
-  });
+// GET /admin/reviews?page=&limit= (Admin)
+// Daftar ulasan dipaginasi agar halaman admin tidak merender ribuan baris sekaligus.
+// Rata-rata bintang dihitung dari seluruh ulasan, bukan hanya halaman yang dikirim.
+adminReviewsRouter.get("/", requireAuth, requireRole("admin"), async (req, res) => {
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
 
-  res.json(
-    reviews.map((r) => ({
+  const [reviews, total, agregat] = await Promise.all([
+    db.review.findMany({
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      skip: (page - 1) * limit,
+    }),
+    db.review.count(),
+    db.review.aggregate({ _avg: { stars: true } }),
+  ]);
+
+  res.json({
+    items: reviews.map((r) => ({
       ...r,
       createdAt: r.createdAt.toISOString(),
-    }))
-  );
+    })),
+    total,
+    page,
+    limit,
+    average: agregat._avg.stars ?? 0,
+  });
 });
 
 // DELETE /admin/reviews/:id (Admin)

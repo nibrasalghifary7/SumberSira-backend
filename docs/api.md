@@ -532,9 +532,12 @@ Pemetaan `transaction_status` Midtrans:
   ```
 - **Respons (201)**: Data review baru.
 
-### GET /admin/reviews
+### GET /admin/reviews?page=&limit=
 - **Akses**: Admin
-- **Respons**: Array semua ulasan, terbaru di atas: `[{ id, name, stars, text, createdAt }]`
+- **Query**: `page` (default 1), `limit` (default 20, maks 100)
+- **Respons**: `{ items, total, page, limit, average }`
+  - `items`: `[{ id, name, stars, text, createdAt }]`, terbaru di atas
+  - `average`: rata-rata bintang dari **seluruh** ulasan (bukan hanya halaman ini)
 
 ### DELETE /admin/reviews/:id
 - **Akses**: Admin
@@ -627,10 +630,14 @@ Pemetaan `transaction_status` Midtrans:
 - **Query**: `limit` (default 20, maks 100)
 - **Respons**: Array foto berstatus `approved` saja, terbaru di atas: `[{ id, url, title, owner, ai, createdAt }]`
 
-### GET /admin/gallery?status=
+### GET /admin/gallery?status=&page=&limit=
 - **Akses**: Admin
-- **Query**: `status` (`pending` | `approved` | `rejected`, opsional)
-- **Respons**: Semua foto lengkap dengan `storageKey` dan `reviewedAt`.
+- **Query**:
+  - `status` (`pending` | `approved` | `rejected`, opsional)
+  - `page` (default 1), `limit` (default 20, maks 100)
+- **Respons**: `{ items, total, page, limit, counts }`
+  - `items`: foto lengkap dengan `storageKey` dan `reviewedAt`
+  - `counts`: `{ all, pending, approved, rejected }` untuk kartu ringkasan
 
 ### PATCH /admin/gallery/:id
 - **Akses**: Admin
