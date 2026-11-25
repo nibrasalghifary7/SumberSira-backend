@@ -1,17 +1,10 @@
 import { Router } from "express";
-import { z } from "zod";
 import { db } from "../config/database.js";
 import { hashPassword } from "../services/password.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { createStaffSchema, patchStaffSchema, resetPasswordSchema } from "../models/staff.model.js";
 
 export const adminStaffRouter = Router();
-
-
-
-
-
-
 
 // Semua rute di bawah khusus admin
 adminStaffRouter.use(requireAuth, requireRole("admin"));

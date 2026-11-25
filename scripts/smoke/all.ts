@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Menjalankan seluruh smoke test P0-P15 secara berurutan.
  * Berhenti pada kegagalan pertama dan mengembalikan exit code sesuai.
  *
@@ -7,7 +7,24 @@
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 
-const PHASES = ["p0", "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10", "p11", "p12", "p13", "p14", "p15"];
+const PHASES = [
+  "p0",
+  "p1",
+  "p2",
+  "p3",
+  "p4",
+  "p5",
+  "p6",
+  "p7",
+  "p8",
+  "p9",
+  "p10",
+  "p11",
+  "p12",
+  "p13",
+  "p14",
+  "p15",
+];
 
 function main() {
   const tsxCli = require.resolve("tsx/cli");

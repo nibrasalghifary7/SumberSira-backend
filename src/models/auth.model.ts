@@ -1,5 +1,6 @@
 // Model auth: skema validasi input (zod) dan pemetaan data ke bentuk respons API.
 import { z } from "zod";
+import { passwordSchema } from "../services/validatePassword.js";
 
 export const loginSchema = z.object({
   email: z.string().email(),
@@ -10,5 +11,5 @@ export const loginSchema = z.object({
 // Ubah password sendiri: sesi lain dicabut, sesi saat ini tetap
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1),
-  newPassword: z.string().min(8).max(72),
+  newPassword: passwordSchema,
 });

@@ -15,6 +15,13 @@ export const adminPaymentsRouter = Router();
 
 // POST /payments/midtrans/notification (Webhook Midtrans: Publik, tanpa auth, tanpa limit ketat)
 paymentsRouter.post("/midtrans/notification", async (req, res) => {
+  // Di produksi webhook hanya masuk akal saat mode Midtrans (kunci server terisi).
+  // Ini mencegah tanda tangan palsu dengan kunci kosong bila mode simulasi
+  // sampai terpasang di produksi.
+  if (config.NODE_ENV === "production" && config.PAYMENT_MODE !== "midtrans") {
+    return res.status(404).json({ error: "NOT_FOUND" });
+  }
+
   const { order_id, status_code, gross_amount, signature_key, transaction_status } = req.body || {};
 
   if (!order_id || !status_code || !gross_amount || !signature_key || !transaction_status) {
@@ -44,18 +51,23 @@ paymentsRouter.post("/midtrans/notification", async (req, res) => {
     return res.status(200).json({ ok: true, ignored: true });
   }
 
-  // 3. Konfirmasi ulang dengan provider.getStatus(order_id) sebagai sumber kebenaran
+  // 3. Pastikan gross_amount sesuai payment.amount sebelum memanggil provider
+  if (Number(gross_amount) !== payment.amount) {
+    console.warn(`[MIDTRANS WEBHOOK] Amount tidak cocok: received ${gross_amount}, expected ${payment.amount}`);
+    return res.status(200).json({ ok: true, ignored: true });
+  }
+
+  // 4. Konfirmasi ulang dengan provider.getStatus(order_id) sebagai sumber kebenaran
   try {
     const provider = providerFor("midtrans");
     const statusResult = await provider.getStatus(String(order_id));
 
-    // Pastikan gross_amount sesuai payment.amount
-    if (Number(gross_amount) !== payment.amount) {
-      console.warn(`[MIDTRANS WEBHOOK] Amount tidak cocok: received ${gross_amount}, expected ${payment.amount}`);
+    // Status pending / tak dikenal (mis. refund) tidak mengubah apa pun.
+    if (statusResult.status === "pending") {
       return res.status(200).json({ ok: true, ignored: true });
     }
 
-    // Apply status pembayaran
+    // Apply status pembayaran (idempoten)
     await applyPaymentStatus(payment.id, statusResult.status, req.body);
     return res.status(200).json({ ok: true });
   } catch (err) {

@@ -1,18 +1,59 @@
 import "dotenv/config";
 import { z } from "zod";
 
+/**
+ * ADMIN_ORIGIN / EXTRA_ORIGINS boleh berisi satu atau beberapa origin
+ * dipisah koma. Hasil: daftar origin tanpa garis miring di akhir, tanpa
+ * entri kosong, dan tanpa duplikat (perbandingan case-insensitive).
+ */
+function parseOrigins(raw: string): string[] {
+  const seen = new Set<string>();
+  const origins: string[] = [];
+
+  for (const part of raw.split(",")) {
+    const origin = part.trim().replace(/\/+$/, "");
+    if (!origin) continue;
+
+    const key = origin.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    origins.push(origin);
+  }
+
+  return origins;
+}
+
+/**
+ * Normalisasi PUBLIC_BASE_URL: buang spasi tepi dan garis miring di akhir.
+ * Contoh: "https://api.contoh.com/" -> "https://api.contoh.com"
+ */
+function normalizePublicBaseUrl(raw: string): string {
+  return raw.trim().replace(/\/+$/, "");
+}
+
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL wajib diisi"),
   PORT: z.coerce.number().default(4000),
-  ADMIN_ORIGIN: z.string().default("http://localhost:3000"),
+  ADMIN_ORIGIN: z
+    .string()
+    .default("http://localhost:3000")
+    .transform(parseOrigins),
+  // Alamat tambahan yang boleh memanggil API (dipisah koma), mis. web Flutter yang dideploy.
+  EXTRA_ORIGINS: z.string().default("").transform(parseOrigins),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   TRUST_PROXY: z.coerce.number().default(0),
-  PUBLIC_BASE_URL: z.string().default(""),
+  // Tingkat detail log terstruktur. "silent" dipakai saat test.
+  LOG_LEVEL: z
+    .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
+    .default("info"),
   // Izinkan tombol "Saya Sudah Bayar" (simulate-pay) di produksi. Hanya untuk demo/tugas;
   // biarkan false bila pembayaran sungguhan (Midtrans) dipakai.
   ALLOW_SIMULATE_PAY: z.enum(["true", "false"]).default("false").transform((v) => v === "true"),
-  // Alamat tambahan yang boleh memanggil API (dipisah koma), mis. web Flutter yang dideploy.
-  EXTRA_ORIGINS: z.string().default(""),
+  // Dipakai untuk dua hal: (1) membentuk URL foto galeri/AI Photo oleh
+  // storage lokal (src/services/storage/index.ts), dan (2) header
+  // X-Override-Notification/URL webhook Midtrans (src/services/payments/index.ts).
+  // Nilainya selalu sudah dinormalisasi (tanpa garis miring di akhir).
+  PUBLIC_BASE_URL: z.string().default("").transform(normalizePublicBaseUrl),
   PAYMENT_MODE: z.enum(["simulation", "midtrans"]).default("simulation"),
   MIDTRANS_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
   MIDTRANS_SERVER_KEY: z.string().default(""),
@@ -35,6 +76,37 @@ const envSchema = z.object({
   CHAT_AI_DAILY_LIMIT: z.coerce.number().int().min(0).default(150),
   PHOTO_AI_DAILY_LIMIT: z.coerce.number().int().min(0).default(100),
 }).superRefine((data, ctx) => {
+  if (data.PUBLIC_BASE_URL) {
+    let valid = false;
+    try {
+      const parsed = new URL(data.PUBLIC_BASE_URL);
+      valid = parsed.protocol === "http:" || parsed.protocol === "https:";
+    } catch {
+      valid = false;
+    }
+
+    if (!valid) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "PUBLIC_BASE_URL harus URL http:// atau https:// yang valid",
+        path: ["PUBLIC_BASE_URL"],
+      });
+    }
+  }
+
+  if (
+    data.NODE_ENV === "production" &&
+    data.STORAGE_DRIVER === "local" &&
+    !data.PUBLIC_BASE_URL
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "PUBLIC_BASE_URL wajib diisi di produksi agar URL foto dapat diakses pengunjung.",
+      path: ["PUBLIC_BASE_URL"],
+    });
+  }
+
   if (data.PAYMENT_MODE === "midtrans" && !data.MIDTRANS_SERVER_KEY) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,

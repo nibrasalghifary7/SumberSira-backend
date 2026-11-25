@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { z } from "zod";
 import { db } from "../config/database.js";
 import { hashPassword, verifyPassword } from "../services/password.js";
 import { COOKIE, newToken, sha256 } from "../services/session.js";
@@ -8,8 +7,6 @@ import { loginLimiter } from "../utils/limiters.js";
 import { loginSchema, changePasswordSchema } from "../models/auth.model.js";
 
 export const authRouter = Router();
-
-
 
 authRouter.post("/login", loginLimiter, async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
@@ -82,8 +79,7 @@ authRouter.delete("/sessions/:id", requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
-
-
+// Ubah password sendiri: sesi lain dicabut, sesi saat ini tetap
 authRouter.post("/change-password", requireAuth, async (req, res) => {
   const parsed = changePasswordSchema.safeParse(req.body);
   if (!parsed.success) {

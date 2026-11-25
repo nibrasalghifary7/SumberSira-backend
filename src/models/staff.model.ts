@@ -1,11 +1,12 @@
 // Model staff: skema validasi input (zod) dan pemetaan data ke bentuk respons API.
 import { z } from "zod";
+import { passwordSchema } from "../services/validatePassword.js";
 
 export const createStaffSchema = z.object({
   name: z.string().trim().min(1).max(60),
   email: z.string().trim().email(),
   role: z.enum(["petugas", "admin"]),
-  password: z.string().min(8).max(72),
+  password: passwordSchema,
 });
 
 export const patchStaffSchema = z.object({
@@ -15,5 +16,5 @@ export const patchStaffSchema = z.object({
 });
 
 export const resetPasswordSchema = z.object({
-  password: z.string().min(8).max(72),
+  password: passwordSchema,
 });

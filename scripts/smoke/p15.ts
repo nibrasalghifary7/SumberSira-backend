@@ -1,193 +1,289 @@
-import http from "node:http";
-import type { AddressInfo } from "node:net";
-import { startTestServer, request, check } from "./_helpers.js";
-import { db } from "../../src/config/database.js";
-import { config } from "../../src/config/index.js";
-import { AiGalat, getAiClient, resetJedaUntukUji, setAiClientForTests, sisaJedaDetik, uraiJson } from "../../src/services/ai/client.js";
-import { batasChat } from "../../src/services/ai/chatbot.js";
-import { z } from "zod";
+/**
+ * Smoke test P15 — kesiapan Midtrans.
+ *
+ * Tidak memanggil jaringan Midtrans sungguhan: seluruh request ke
+ * api.sandbox.midtrans.com dicegat oleh fetch palsu. Yang diuji:
+ * - charge QRIS: qr_string / URL dari actions[], expiresAt WIB, galat tanpa QR;
+ * - webhook: signature valid + settlement -> paid, signature salah -> 403,
+ *   amount tidak cocok / status tak dikenal -> 200 ignored, idempoten;
+ * - polling GET /payments/:id memakai getStatus saat PAYMENT_MODE=midtrans;
+ * - simulate-pay mati di mode midtrans;
+ * - pemetaan transaction_status.
+ */
+import crypto from "node:crypto";
 
-// P15: klien AI SUNGGUHAN (fetch ke penyedia gratis yang kompatibel dengan OpenAI), diuji terhadap server tiruan lokal yang
-// meniru balasan Gemini. Diperiksa: bentuk permintaan (alamat, kunci, isi), pembacaan balasan, jeda otomatis saat kuota
-// habis (429) atau kunci ditolak (401), dan jalur lengkap dari /chat sampai ke "penyedia AI" tanpa memakai kuota sungguhan.
+const MARK = `[SMOKE]-MT-${Date.now()}`;
+const SERVER_KEY = "SMOKE-MIDTRANS-SERVER-KEY";
 
-interface Terima {
-  path: string;
-  method: string;
-  auth: string | undefined;
-  body: any;
-}
+process.env.PAYMENT_MODE = "midtrans";
+process.env.MIDTRANS_ENV = "sandbox";
+process.env.MIDTRANS_SERVER_KEY = SERVER_KEY;
 
-// Server tiruan: nextReply menentukan balasan berikutnya. Semua permintaan yang masuk dicatat.
-function mulaiServerAi() {
-  const masuk: Terima[] = [];
-  let balas: (n: number) => { status: number; body: unknown; headers?: Record<string, string> } = () => ({ status: 200, body: {} });
-  const server = http.createServer((req, res) => {
-    let data = "";
-    req.on("data", (d) => (data += d));
-    req.on("end", () => {
-      masuk.push({ path: req.url ?? "", method: req.method ?? "", auth: req.headers.authorization, body: data ? JSON.parse(data) : null });
-      const r = balas(masuk.length);
-      res.writeHead(r.status, { "Content-Type": "application/json", ...(r.headers ?? {}) });
-      res.end(JSON.stringify(r.body));
-    });
-  });
-  return new Promise<{ url: string; masuk: Terima[]; atur: (f: typeof balas) => void; tutup: () => Promise<void> }>((resolve) => {
-    server.listen(0, "127.0.0.1", () => {
-      const port = (server.address() as AddressInfo).port;
-      resolve({
-        url: `http://127.0.0.1:${port}/v1beta/openai`,
-        masuk,
-        atur: (f) => (balas = f),
-        tutup: () => new Promise((r) => server.close(() => r())),
-      });
-    });
+type FakeJson = Record<string, unknown>;
+
+let chargeResponse: FakeJson = {};
+let statusResponse: FakeJson = {};
+
+function jsonResponse(data: FakeJson, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "Content-Type": "application/json" },
   });
 }
 
-const gemini = (teks: string) => ({ status: 200, body: { choices: [{ index: 0, message: { role: "assistant", content: teks }, finish_reason: "stop" }] } });
-const galatGoogle = (status: number, message: string, headers?: Record<string, string>) => ({ status, body: [{ error: { code: status, message, status: "X" } }], headers });
+const originalFetch = globalThis.fetch;
+(globalThis as any).fetch = async (input: any, init?: any) => {
+  const url = typeof input === "string" ? input : String(input);
+
+  if (url.includes("/v2/charge")) {
+    return jsonResponse(chargeResponse);
+  }
+
+  if (/\/v2\/.+\/status/.test(url)) {
+    return jsonResponse(statusResponse);
+  }
+
+  return originalFetch(input, init);
+};
+
+function sign(orderId: string, statusCode: string, grossAmount: string): string {
+  return crypto
+    .createHash("sha512")
+    .update(`${orderId}${statusCode}${grossAmount}${SERVER_KEY}`)
+    .digest("hex");
+}
 
 async function run() {
-  console.log("=== Menjalankan Smoke Test P15 (klien AI sungguhan) ===");
-  const ai = await mulaiServerAi();
-  const awal = { kunci: config.AI_API_KEY, url: config.AI_BASE_URL, usaha: config.AI_REASONING_EFFORT, batas: config.CHAT_AI_DAILY_LIMIT };
+  const { startTestServer, request, check } = await import("./_helpers.js");
+  const { db } = await import("../../src/config/database.js");
+  const { midtransProvider, mapMidtransStatus } = await import("../../src/services/payments/index.js");
+
+  console.log("=== Menjalankan Smoke Test P15 (kesiapan Midtrans) ===");
   const { baseUrl, close } = await startTestServer();
-  const dibuat: string[] = [];
+  const paymentIds: string[] = [];
 
   try {
-    setAiClientForTests(null);
-    resetJedaUntukUji();
-    config.AI_API_KEY = "kunci-uji-rahasia";
-    config.AI_BASE_URL = `${ai.url}/`; // garis miring di akhir sengaja, harus dirapikan
-    config.AI_REASONING_EFFORT = "";
-    const klien = getAiClient();
-    check("Dengan kunci, klien sungguhan tersedia", klien !== null);
-
-    // ---- Bentuk permintaan dan pembacaan balasan ----
-    ai.atur(() => gemini('{"terjawab": true, "jawaban": "ok"}'));
-    const teks = await klien!.chat({
-      model: "gemini-uji",
-      messages: [
-        { role: "system", content: "aturan" },
-        { role: "user", content: [{ type: "text", text: "lihat" }, { type: "image_url", image_url: { url: "data:image/jpeg;base64,AAAA" } }] },
-      ],
+    // ---------- 1. Charge QRIS ----------
+    chargeResponse = {
+      status_code: "201",
+      transaction_id: "mt-tx-1",
+      qr_string: "00020101021226670016COM.GOJEK.WWW0118",
+      expiry_time: "2026-11-18 10:00:00",
+    };
+    const charge1 = await midtransProvider.createQris({
+      orderId: `${MARK}-charge-1`,
+      amount: 50000,
+      customerName: "Uji",
+      customerPhone: "08123456789",
+      items: [{ id: "ticket", name: "Tiket Masuk", price: 50000, quantity: 1 }],
     });
-    const p = ai.masuk[0];
-    check("Balasan dibaca dari choices[0].message.content", teks === '{"terjawab": true, "jawaban": "ok"}');
-    check("Alamat: POST ke /chat/completions tanpa garis miring ganda", p.method === "POST" && p.path === "/v1beta/openai/chat/completions", `${p.method} ${p.path}`);
-    check("Kunci dikirim sebagai Bearer di header", p.auth === "Bearer kunci-uji-rahasia");
-    check("Isi: model dan pesan ikut, gambar sebagai image_url", p.body.model === "gemini-uji" && p.body.messages[1].content[1].image_url.url.startsWith("data:image/jpeg;base64,"));
-    check("Isi minimal: tanpa temperature, max_tokens, reasoning_effort bila tidak diatur", !("temperature" in p.body) && !("max_tokens" in p.body) && !("reasoning_effort" in p.body));
-    check("Kunci tidak ikut di badan permintaan", !JSON.stringify(p.body).includes("kunci-uji-rahasia"));
+    check("Charge mengambil qr_string", charge1.qrString === chargeResponse.qr_string);
+    check("Charge menyimpan transaction_id", charge1.providerTransactionId === "mt-tx-1");
+    check(
+      "expiry_time WIB (10:00) menjadi 03:00Z",
+      charge1.expiresAt.toISOString() === "2026-11-18T03:00:00.000Z",
+      charge1.expiresAt.toISOString()
+    );
 
-    config.AI_REASONING_EFFORT = "low";
-    await klien!.chat({ model: "m", messages: [{ role: "user", content: "x" }] });
-    check("reasoning_effort dikirim hanya bila diatur", ai.masuk[1].body.reasoning_effort === "low");
-    config.AI_REASONING_EFFORT = "";
+    chargeResponse = {
+      status_code: "201",
+      transaction_id: "mt-tx-2",
+      actions: [{ name: "generate-qr-code", method: "GET", url: "https://api.example/qr-2" }],
+    };
+    const charge2 = await midtransProvider.createQris({
+      orderId: `${MARK}-charge-2`,
+      amount: 25000,
+      customerName: "Uji",
+      customerPhone: "08123456789",
+      items: [{ id: "ticket", name: "Tiket Masuk", price: 25000, quantity: 1 }],
+    });
+    check("Charge memakai URL QR dari actions[]", charge2.qrUrl === "https://api.example/qr-2");
+    check(
+      "expiresAt default ~15 menit",
+      charge2.expiresAt.getTime() > Date.now() + 14 * 60 * 1000 &&
+        charge2.expiresAt.getTime() <= Date.now() + 16 * 60 * 1000
+    );
 
-    // ---- Balasan kosong atau salah bentuk ----
-    ai.atur(() => gemini("   "));
-    const kosong = await klien!.chat({ model: "m", messages: [{ role: "user", content: "x" }] }).then(() => null, (e) => e);
-    check("Balasan kosong melempar AiGalat", kosong instanceof AiGalat);
-    ai.atur(() => ({ status: 200, body: { aneh: true } }));
-    const aneh = await klien!.chat({ model: "m", messages: [{ role: "user", content: "x" }] }).then(() => null, (e) => e);
-    check("Balasan tanpa choices melempar AiGalat", aneh instanceof AiGalat);
+    chargeResponse = { status_code: "201", transaction_id: "mt-tx-3" };
+    let noQrError = "";
+    try {
+      await midtransProvider.createQris({
+        orderId: `${MARK}-charge-3`,
+        amount: 25000,
+        customerName: "Uji",
+        customerPhone: "08123456789",
+        items: [{ id: "ticket", name: "Tiket Masuk", price: 25000, quantity: 1 }],
+      });
+    } catch (err) {
+      noQrError = String(err);
+    }
+    check("Charge tanpa QR melempar galat (route -> PAYMENT_PROVIDER_ERROR)", noQrError.length > 0);
 
-    // ---- Galat penyedia ----
-    ai.atur(() => galatGoogle(400, "Model tidak dikenal"));
-    const e400 = await klien!.chat({ model: "m", messages: [{ role: "user", content: "x" }] }).then(() => null, (e) => e);
-    check("400 melempar AiGalat berisi alasan penyedia dan TANPA jeda", e400 instanceof AiGalat && e400.status === 400 && e400.message.includes("Model tidak dikenal") && sisaJedaDetik() === 0);
-    check("Pesan galat tidak membocorkan kunci", !String(e400?.message).includes("kunci-uji-rahasia"));
+    // ---------- 2. Pemetaan status ----------
+    check("settlement -> paid", mapMidtransStatus("settlement") === "paid");
+    check("capture -> paid", mapMidtransStatus("capture", "accept") === "paid");
+    check("expire -> expired", mapMidtransStatus("expire") === "expired");
+    check("cancel -> cancelled", mapMidtransStatus("cancel") === "cancelled");
+    check("deny -> failed", mapMidtransStatus("deny") === "failed");
+    check("failure -> failed", mapMidtransStatus("failure") === "failed");
 
-    ai.atur(() => galatGoogle(500, "gangguan"));
-    const e500 = await klien!.chat({ model: "m", messages: [{ role: "user", content: "x" }] }).then(() => null, (e) => e);
-    check("500 melempar AiGalat tanpa jeda", e500 instanceof AiGalat && e500.status === 500 && sisaJedaDetik() === 0);
+    // ---------- 3. Webhook ----------
+    const p1 = await db.payment.create({
+      data: {
+        method: "qris",
+        provider: "midtrans",
+        status: "pending",
+        amount: 50000,
+        providerOrderId: `${MARK}-order-1`,
+      },
+    });
+    paymentIds.push(p1.id);
 
-    // ---- Jeda otomatis saat kuota habis ----
-    const sebelum = ai.masuk.length;
-    ai.atur(() => galatGoogle(429, "Quota exceeded for metric: requests per minute", { "Retry-After": "2" }));
-    const e429 = await klien!.chat({ model: "m", messages: [{ role: "user", content: "x" }] }).then(() => null, (e) => e);
-    check("429 per menit: AiGalat dan jeda mengikuti Retry-After", e429 instanceof AiGalat && e429.status === 429 && sisaJedaDetik() >= 1 && sisaJedaDetik() <= 2, `sisa ${sisaJedaDetik()}`);
-    const saatJeda = await klien!.chat({ model: "m", messages: [{ role: "user", content: "x" }] }).then(() => null, (e) => e);
-    check("Selama jeda, penyedia TIDAK ditembak lagi", saatJeda instanceof AiGalat && ai.masuk.length === sebelum + 1);
-    await new Promise((r) => setTimeout(r, 2200));
-    ai.atur(() => gemini('{"terjawab": true, "jawaban": "pulih"}'));
-    const pulih = await klien!.chat({ model: "m", messages: [{ role: "user", content: "x" }] });
-    check("Setelah jeda selesai, AI dipakai lagi", pulih.includes("pulih") && sisaJedaDetik() === 0);
+    const p2 = await db.payment.create({
+      data: {
+        method: "qris",
+        provider: "midtrans",
+        status: "pending",
+        amount: 50000,
+        providerOrderId: `${MARK}-order-2`,
+      },
+    });
+    paymentIds.push(p2.id);
 
-    // Bentuk galat kuota Google yang sebenarnya: pesan umum, nama kuota harian hanya ada di bagian detail
-    resetJedaUntukUji();
-    ai.atur(() => ({
-      status: 429,
-      body: [{ error: { code: 429, message: "You exceeded your current quota, please check your plan and billing details.", status: "RESOURCE_EXHAUSTED", details: [{ "@type": "type.googleapis.com/google.rpc.QuotaFailure", violations: [{ quotaId: "GenerateRequestsPerDayPerProjectPerModel-FreeTier" }] }] } }],
-    }));
-    await klien!.chat({ model: "m", messages: [{ role: "user", content: "x" }] }).catch(() => {});
-    check("429 kuota harian (penanda di bagian detail): jeda panjang sekitar 1 jam", sisaJedaDetik() > 3000, `sisa ${sisaJedaDetik()}`);
-    resetJedaUntukUji();
-    ai.atur(() => galatGoogle(429, "Quota exceeded for metric: generate_requests_per_day_per_project_per_model, limit: 500"));
-    await klien!.chat({ model: "m", messages: [{ role: "user", content: "x" }] }).catch(() => {});
-    check("429 kuota harian (penulisan per_day dengan garis bawah): jeda panjang", sisaJedaDetik() > 3000, `sisa ${sisaJedaDetik()}`);
+    statusResponse = {
+      status_code: "200",
+      transaction_status: "settlement",
+      fraud_status: "accept",
+      gross_amount: "50000.00",
+    };
 
-    resetJedaUntukUji();
-    ai.atur(() => galatGoogle(401, "API key not valid"));
-    await klien!.chat({ model: "m", messages: [{ role: "user", content: "x" }] }).catch(() => {});
-    check("401 kunci ditolak: jeda 10 menit agar tidak menembak berulang", sisaJedaDetik() > 500 && sisaJedaDetik() <= 600, `sisa ${sisaJedaDetik()}`);
-    resetJedaUntukUji();
-    // Google membalas kunci yang salah dengan 400, bukan 401 (dicek langsung ke server Google dengan kunci palsu)
-    ai.atur(() => galatGoogle(400, "Please pass a valid API key"));
-    await klien!.chat({ model: "m", messages: [{ role: "user", content: "x" }] }).catch(() => {});
-    check("400 'valid API key' juga dijeda 10 menit", sisaJedaDetik() > 500 && sisaJedaDetik() <= 600, `sisa ${sisaJedaDetik()}`);
-    resetJedaUntukUji();
+    const validBody = {
+      order_id: p1.providerOrderId,
+      status_code: "200",
+      gross_amount: "50000.00",
+      transaction_status: "settlement",
+      signature_key: sign(p1.providerOrderId!, "200", "50000.00"),
+    };
 
-    // ---- Server tidak terjangkau ----
-    config.AI_BASE_URL = "http://127.0.0.1:1/v1beta/openai";
-    const mati = await klien!.chat({ model: "m", messages: [{ role: "user", content: "x" }] }).then(() => null, (e) => e);
-    check("Penyedia tak terjangkau melempar AiGalat, bukan crash", mati instanceof AiGalat);
-    config.AI_BASE_URL = ai.url;
+    const rValid = await request(baseUrl, "/payments/midtrans/notification", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validBody),
+    });
+    check("Webhook signature valid dibalas 200", rValid.status === 200 && rValid.body?.ok === true);
 
-    // ---- uraiJson ----
-    const skema = z.object({ a: z.number() });
-    check("uraiJson: JSON polos", uraiJson('{"a": 1}', skema)?.a === 1);
-    check("uraiJson: dibungkus pagar kode dan kalimat pembuka", uraiJson('Ini hasilnya:\n```json\n{"a": 2}\n```\nSemoga membantu', skema)?.a === 2);
-    check("uraiJson: bentuk salah atau bukan JSON menghasilkan null", uraiJson('{"a": "x"}', skema) === null && uraiJson("tidak ada json", skema) === null && uraiJson("{rusak", skema) === null);
+    const p1After = await db.payment.findUnique({ where: { id: p1.id } });
+    check("Webhook settlement membuat payment paid", p1After?.status === "paid");
+    check("paidAt terisi", p1After?.paidAt instanceof Date);
 
-    // ---- Jalur lengkap: /chat -> klien sungguhan -> penyedia tiruan ----
-    const faq = await db.faq.create({ data: { keys: ["smokeunik15"], answer: "Jawaban FAQ uji [SMOKE15]", sortOrder: 999 } });
-    dibuat.push(faq.id);
-    config.CHAT_AI_DAILY_LIMIT = batasChat.terpakai() + 5;
-    ai.masuk.length = 0;
-    ai.atur(() => gemini('{"terjawab": true, "jawaban": "Tiket Rp5.000 per orang."}'));
-    const bebas = await request(baseUrl, "/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: "berapa harga masuknya?" }) });
-    check("/chat -> penyedia: dijawab AI", bebas.status === 200 && bebas.body.source === "ai" && bebas.body.answer.includes("Rp5.000"), JSON.stringify(bebas.body));
-    check("Penyedia menerima data resmi di pesan sistem dan pertanyaan di pesan pengguna", ai.masuk.length === 1 && String(ai.masuk[0].body.messages[0].content).includes("DATA RESMI") && ai.masuk[0].body.messages.at(-1).content.includes("harga masuknya"));
-    check("Jawaban ke aplikasi tidak memuat kunci", !JSON.stringify(bebas.body).includes("kunci-uji-rahasia"));
+    const firstPaidAt = p1After?.paidAt?.getTime();
+    const rRepeat = await request(baseUrl, "/payments/midtrans/notification", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validBody),
+    });
+    const p1Repeat = await db.payment.findUnique({ where: { id: p1.id } });
+    check("Webhook berulang idempoten (200)", rRepeat.status === 200 && rRepeat.body?.ok === true);
+    check("paidAt tidak berubah saat diulang", p1Repeat?.paidAt?.getTime() === firstPaidAt);
 
-    ai.atur(() => galatGoogle(429, "Quota exceeded: requests per minute"));
-    const jatahSebelum = batasChat.terpakai();
-    const habis = await request(baseUrl, "/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: "smokeunik15" }) });
-    check("Kuota penyedia habis: pengunjung tetap dijawab dari FAQ (200)", habis.status === 200 && habis.body.source === "faq" && String(habis.body.answer).includes("[SMOKE15]"), JSON.stringify(habis.body));
-    check("Jatah harian dikembalikan saat panggilan gagal", batasChat.terpakai() === jatahSebelum);
-    const hitAwal = ai.masuk.length;
-    const lagi = await request(baseUrl, "/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: "kalau parkir mobil?" }) });
-    check("Selama jeda, chat tidak menembak penyedia dan tidak 500", lagi.status === 200 && ai.masuk.length === hitAwal);
+    const rBadSig = await request(baseUrl, "/payments/midtrans/notification", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...validBody, order_id: p2.providerOrderId, signature_key: "abc123" }),
+    });
+    check("Signature salah dibalas 403", rBadSig.status === 403, `status ${rBadSig.status}`);
+    check("Signature salah error FORBIDDEN", rBadSig.body?.error === "FORBIDDEN");
+    const p2AfterBadSig = await db.payment.findUnique({ where: { id: p2.id } });
+    check("Signature salah tidak mengubah status", p2AfterBadSig?.status === "pending");
+
+    const mismatchBody = {
+      order_id: p2.providerOrderId,
+      status_code: "200",
+      gross_amount: "1000.00",
+      transaction_status: "settlement",
+      signature_key: sign(p2.providerOrderId!, "200", "1000.00"),
+    };
+    const rMismatch = await request(baseUrl, "/payments/midtrans/notification", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(mismatchBody),
+    });
+    check(
+      "Amount tidak cocok dibalas 200 ignored",
+      rMismatch.status === 200 && rMismatch.body?.ignored === true,
+      JSON.stringify(rMismatch.body)
+    );
+    const p2AfterMismatch = await db.payment.findUnique({ where: { id: p2.id } });
+    check("Amount tidak cocok tidak mengubah status", p2AfterMismatch?.status === "pending");
+
+    // Status tak dikenal (refund) -> getStatus memetakan pending -> ignored
+    statusResponse = { status_code: "200", transaction_status: "refund", gross_amount: "50000.00" };
+    const refundBody = {
+      order_id: p2.providerOrderId,
+      status_code: "200",
+      gross_amount: "50000.00",
+      transaction_status: "refund",
+      signature_key: sign(p2.providerOrderId!, "200", "50000.00"),
+    };
+    const rUnknown = await request(baseUrl, "/payments/midtrans/notification", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(refundBody),
+    });
+    check(
+      "Status tak dikenal dibalas 200 ignored",
+      rUnknown.status === 200 && rUnknown.body?.ignored === true,
+      JSON.stringify(rUnknown.body)
+    );
+
+    const unknownOrder = {
+      order_id: `${MARK}-tidak-ada`,
+      status_code: "200",
+      gross_amount: "50000.00",
+      transaction_status: "settlement",
+      signature_key: sign(`${MARK}-tidak-ada`, "200", "50000.00"),
+    };
+    const rUnknownOrder = await request(baseUrl, "/payments/midtrans/notification", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(unknownOrder),
+    });
+    check(
+      "Order id tak dikenal dibalas 200 ignored",
+      rUnknownOrder.status === 200 && rUnknownOrder.body?.ignored === true
+    );
+
+    // ---------- 4. Polling GET /payments/:id memakai getStatus ----------
+    statusResponse = {
+      status_code: "200",
+      transaction_status: "settlement",
+      fraud_status: "accept",
+      gross_amount: "50000.00",
+    };
+    const rPoll = await request(baseUrl, `/payments/${p2.id}`);
+    check("Polling status 200", rPoll.status === 200);
+    check("Polling menyinkronkan settlement menjadi paid", rPoll.body?.status === "paid");
+    const p2AfterPoll = await db.payment.findUnique({ where: { id: p2.id } });
+    check("Polling menyimpan status paid ke database", p2AfterPoll?.status === "paid");
+
+    // ---------- 5. simulate-pay mati di mode midtrans ----------
+    const rSimulate = await request(baseUrl, `/payments/${p2.id}/simulate-pay`, {
+      method: "POST",
+    });
+    check("simulate-pay 404 saat PAYMENT_MODE=midtrans", rSimulate.status === 404);
 
     console.log("=== Seluruh Pemeriksaan P15 LULUS ===");
   } finally {
-    setAiClientForTests(null);
-    resetJedaUntukUji();
-    config.AI_API_KEY = awal.kunci;
-    config.AI_BASE_URL = awal.url;
-    config.AI_REASONING_EFFORT = awal.usaha;
-    config.CHAT_AI_DAILY_LIMIT = awal.batas;
-    for (const id of dibuat) await db.faq.delete({ where: { id } }).catch(() => {});
-    await db.unansweredQuestion.deleteMany({ where: { question: { in: ["berapa harga masuknya?", "kalau parkir mobil?"] } } }).catch(() => {});
+    (globalThis as any).fetch = originalFetch;
+    if (paymentIds.length > 0) {
+      await db.payment.deleteMany({ where: { id: { in: paymentIds } } });
+    }
     await close();
-    await ai.tutup();
   }
 }
 
 run().catch((err) => {
+  (globalThis as any).fetch = originalFetch;
   console.error("Smoke test P15 gagal:", err);
   process.exit(1);
 });
