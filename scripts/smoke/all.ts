@@ -1,5 +1,5 @@
 ﻿/**
- * Menjalankan seluruh smoke test P0-P15 secara berurutan.
+ * Menjalankan seluruh smoke test P0-P18 secara berurutan.
  * Berhenti pada kegagalan pertama dan mengembalikan exit code sesuai.
  *
  * Pemakaian: npx tsx scripts/smoke/all.ts  (atau: npm run smoke)
@@ -24,6 +24,9 @@ const PHASES = [
   "p13",
   "p14",
   "p15",
+  "p16",
+  "p17",
+  "p18",
 ];
 
 function main() {
@@ -39,7 +42,9 @@ function main() {
 
     const res = spawnSync(process.execPath, [tsxCli, script], {
       stdio: "inherit",
-      env: process.env,
+      // Smoke test tidak boleh memakai kunci AI asli (menghabiskan kuota gratis dan jawabannya tidak pasti), jadi AI
+      // dimatikan untuk semua fase. Uji AI (p16-p18) memakai klien tiruan atau server tiruan sendiri.
+      env: { ...process.env, AI_API_KEY: "" },
     });
 
     if (res.status === 0) {
