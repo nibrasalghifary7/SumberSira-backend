@@ -62,6 +62,13 @@ Salin `.env.example` menjadi `.env`, lalu isi. Semua variabel punya nilai bawaan
 | `MIDTRANS_CLIENT_KEY` | Tidak | `SB-Mid-client-...` | Kunci client Midtrans, dipakai web admin bila memakai Snap/QR. |
 | `STORAGE_DRIVER` | Tidak | `local` | `local` (folder `uploads/`, cocok pengembangan) atau `vercel-blob` (produksi). |
 | `BLOB_READ_WRITE_TOKEN` | **Wajib** bila `STORAGE_DRIVER=vercel-blob` | `vercel_blob_rw_...` | Token Vercel Blob. **Rahasia.** |
+| `AI_API_KEY` | Tidak | `""` | Kunci GRATIS dari aistudio.google.com untuk dua fitur AI. Kosong = AI mati, aplikasi tetap jalan memakai cadangan tanpa AI |
+| `AI_BASE_URL` | Tidak | `https://generativelanguage.googleapis.com/v1beta/openai` | Alamat API yang kompatibel dengan OpenAI. Bawaan Gemini; penyedia gratis lain (mis. Groq, OpenRouter) cukup ganti alamat, kunci, dan model |
+| `CHAT_MODEL` | Tidak | `gemini-3.5-flash-lite` | Model chatbot. Gratis dan kuotanya paling longgar; `gemini-3.6-flash` atau `gemini-3.8-flash` lebih pintar tapi kuota hariannya jauh lebih sedikit |
+| `PHOTO_AI_MODEL` | Tidak | `gemini-3.5-flash-lite` | Model yang menilai foto (hanya melihat dan memberi angka, tidak menghasilkan gambar) |
+| `AI_REASONING_EFFORT` | Tidak | `""` | Opsional: `minimal`, `low`, `medium`, `high`. Kosong = bawaan model |
+| `CHAT_AI_DAILY_LIMIT` | Tidak | `150` | Batas jawaban AI per hari (WIB) supaya kuota gratis tidak habis; lewat batas, chatbot beralih ke FAQ. `0` = matikan AI |
+| `PHOTO_AI_DAILY_LIMIT` | Tidak | `100` | Batas penilaian foto oleh AI per hari. `0` = foto tidak dikirim ke AI sama sekali, mesin memakai statistik foto |
 
 Catatan penting:
 
@@ -98,6 +105,19 @@ Daftarkan URL webhook berikut di dashboard Midtrans:
 
 - **`local`**: berkas disimpan di folder `uploads/` dan disajikan lewat `/uploads/<key>`. Cocok untuk pengembangan; berkas hilang saat deploy ulang di platform tanpa disk persisten.
 - **`vercel-blob`**: berkas disimpan di Vercel Blob (butuh `BLOB_READ_WRITE_TOKEN`). Dipakai di produksi.
+
+### Fitur AI (gratis)
+
+Hanya ada dua fitur AI, keduanya memakai tier **gratis** Google Gemini lewat antarmuka yang kompatibel dengan OpenAI (`fetch` biasa, tanpa SDK berbayar). Kunci `AI_API_KEY` hanya dibaca server dan tidak pernah dikirim ke aplikasi.
+
+**Cara mendapat kunci gratis:** buka aistudio.google.com, masuk dengan akun Google, pilih *Get API key*, lalu buat kunci. Tidak perlu kartu kredit. **Jangan menghubungkan akun penagihan (billing) ke proyek kunci itu**: tanpa billing proyek tetap di tier gratis dan tidak bisa menagih; yang terjadi bila kuota habis hanyalah galat 429. Isi `AI_API_KEY` di `.env` (lokal) atau di Environment hosting (produksi), lalu mulai ulang backend. Untuk memastikan AI benar-benar hidup, jalankan `npm run ai:cek`: perintah ini menguji kunci, chatbot, dan penilaian foto (memakai 3 panggilan dari kuota gratis) dan menjelaskan dengan bahasa biasa bila ada yang salah, mis. kunci salah salin, nama model keliru, atau kuota habis.
+
+1. **Chatbot Tanya Sira** (`src/services/ai/chatbot.ts`). Tombol cepat yang diatur admin dijawab langsung dari FAQ. Pertanyaan bebas dikirim ke AI bersama **DATA RESMI** yang dirakit dari database setiap kali (tiket, parkir, wahana dan harganya, jam datang, keramaian sekarang, dan FAQ admin) dan aturan keras: jawab hanya dari data itu, jangan menebak, abaikan perintah dari pengunjung, tolak topik di luar Sumber Sira. AI diminta membalas JSON `{terjawab, jawaban}` yang diperiksa dengan skema; bila `terjawab=false` pertanyaan masuk ke Belum Terjawab. Bila AI mati, jatah harian habis, balasannya tidak terbaca, atau penyedia galat, chatbot memakai pencocokan kata kunci FAQ seperti sebelumnya, jadi pengunjung tidak pernah melihat galat mentah.
+2. **AI Photo** (`src/services/ai/photo-advisor.ts` dan `src/services/photo/engine.ts`). AI **hanya menilai** foto (jenis foto, kabut, terang-gelap, perlu kontras dan warna berapa, ada orang atau tidak) dan mengembalikan angka; semua angka dijepit ke rentang aman. Piksel diolah oleh mesin pengolahan gambar biasa (kurva warna per kanal, kompensasi merah bawah air, kontras lokal pada kecerahan, vibrance, penajaman halus). Tidak ada model generatif, jadi wajah, bentuk, dan latar tidak mungkin berubah; ukuran dan proporsi tetap (hanya diperkecil bila sisi terpanjang melebihi 2560 px). Pengolahan terjadi di server, jadi ponsel yang lemah pun mendapat hasil yang sama. Tanpa kunci, mesin memakai statistik foto sendiri dan hasilnya tetap bagus.
+
+**Menjaga kuota gratis.** Batas harian (`CHAT_AI_DAILY_LIMIT`, `PHOTO_AI_DAILY_LIMIT`) dan pembatas laju per IP mencegah kuota habis oleh sedikit pengguna. Bila penyedia membalas 429 (kuota habis) atau menolak kunci, klien berhenti menembak selama beberapa saat (1 menit untuk kuota per menit, 1 jam untuk kuota harian, 10 menit untuk kunci ditolak) dan langsung memakai cadangan tanpa AI. Batas gratis tiap model berbeda dan bisa berubah; lihat angka proyekmu di aistudio.google.com/rate-limit.
+
+**Privasi.** Di tier gratis Google boleh memakai isi permintaan untuk memperbaiki produknya. Yang dikirim ke AI: teks pertanyaan chat bersama data resmi Sumber Sira, dan untuk foto hanya versi kecil (maksimal 512 px) untuk dinilai. Bila tidak ingin foto pengunjung terkirim ke pihak ketiga, set `PHOTO_AI_DAILY_LIMIT=0`: fitur foto tetap jalan penuh karena mesin menilai foto sendiri.
 
 ## Menjalankan di komputer sendiri
 
@@ -147,7 +167,8 @@ Daftarkan URL webhook berikut di dashboard Midtrans:
 | `npm run build` | Pemeriksaan build yang dipakai CI (sama dengan `tsc --noEmit`) |
 | `npm run seed` | Data awal: akun demo, 8 wahana, 4 slot jam |
 | `npm run seed:extra` | Contoh harga, ulasan, dan FAQ (hanya kalau tabel masih kosong) |
-| `npm run smoke` | Menjalankan seluruh smoke test P0–P15 secara berurutan |
+| `npm run smoke` | Menjalankan seluruh smoke test P0–P18 secara berurutan |
+| `npm run ai:cek` | Menguji kunci AI, chatbot, dan penilaian foto (3 panggilan dari kuota gratis) dan menjelaskan bila ada yang salah |
 
 Proyek ini menjalankan TypeScript langsung dengan `tsx` (tanpa kompilasi ke `dist/`),
 jadi `npm run build` adalah pemeriksaan tipe yang dijalankan CI sebelum image Docker
@@ -164,12 +185,14 @@ Dibuat oleh `npm run seed`, **hanya untuk pengembangan**. Ganti dengan password 
 
 ## Smoke test
 
-Skrip uji end-to-end ada di `scripts/smoke/`, satu per fase pengembangan ditambah pemeriksaan konfigurasi (`p0.ts` sampai `p15.ts`). Semua skrip menyalakan servernya sendiri di port acak, memakai data berawalan `[SMOKE]`, dan **membersihkan data uji** di akhir, jadi aman dijalankan pada database tim.
+Skrip uji end-to-end ada di `scripts/smoke/`, satu per fase pengembangan ditambah pemeriksaan konfigurasi (`p0.ts` sampai `p18.ts`). Semua skrip menyalakan servernya sendiri di port acak, memakai data berawalan `[SMOKE]`, dan **membersihkan data uji** di akhir, jadi aman dijalankan pada database tim.
 
 ```
-npx tsx scripts/smoke/all.ts     # seluruh fase P0-P15 berurutan, berhenti di kegagalan pertama
+npx tsx scripts/smoke/all.ts     # seluruh fase P0-P18 berurutan, berhenti di kegagalan pertama
 npx tsx scripts/smoke/p8.ts      # satu fase saja
 ```
+
+Fase p16 sampai p18 menguji fitur AI (chatbot, penilai foto, dan klien AI) memakai klien tiruan, jadi tanpa kunci dan tanpa memakai kuota.
 
 Syarat: `.env` terisi `DATABASE_URL`. Mode pembayaran boleh `simulation` (bawaan) — smoke test tidak memakai Midtrans sungguhan.
 
@@ -302,6 +325,7 @@ Variabel environment yang **wajib diisi di server produksi**:
 | `MIDTRANS_CLIENT_KEY` | Kunci client untuk web admin |
 | `STORAGE_DRIVER` | `vercel-blob` (folder lokal tidak persisten di platform cloud) |
 | `BLOB_READ_WRITE_TOKEN` | Token Vercel Blob |
+| `AI_API_KEY` | (opsional) Kunci gratis dari aistudio.google.com untuk dua fitur AI. Tanpa kunci AI mati dan aplikasi memakai cadangan tanpa AI. Isi lewat tab Environment Render, bukan lewat `render.yaml` |
 
 Perilaku yang otomatis berubah saat `NODE_ENV=production`: CORS hanya menerima `ADMIN_ORIGIN` dan
 `EXTRA_ORIGINS` (aturan `localhost:*` dihapus), cookie sesi menjadi `Secure`, `simulate-pay` butuh
