@@ -32,11 +32,11 @@ async function run() {
     });
     check("Bintang 6 ditolak 400", rInvalidSix.status === 400);
 
-    // 2. Baca ulasan awal (dari seed-extra)
+    // 2. Baca ulasan awal. Seed tidak lagi membawa ulasan demo, jadi jumlah awal boleh nol; yang diuji adalah bentuk datanya.
     const rInitialReviews = await request(baseUrl, "/reviews");
     check("GET /reviews status 200", rInitialReviews.status === 200);
     const initialCount = rInitialReviews.body.count;
-    check("Ulasan awal minimal 3 item", initialCount >= 3);
+    check("Jumlah ulasan berupa angka dan daftar item sesuai", typeof initialCount === "number" && Array.isArray(rInitialReviews.body.items));
     const initialRating = rInitialReviews.body.rating;
     check("Rating berupa angka float 1 desimal", typeof initialRating === "number");
 

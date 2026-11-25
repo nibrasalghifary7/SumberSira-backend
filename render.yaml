@@ -29,7 +29,7 @@ services:
       - key: PAYMENT_MODE
         value: simulation
       # Folder lokal hilang saat deploy ulang. Untuk produksi, ganti ke vercel-blob
-      # dan isi BLOB_READ_WRITE_TOKEN (lihat docs/deploy.md).
+      # dan isi BLOB_READ_WRITE_TOKEN.
       - key: STORAGE_DRIVER
         value: local
       # Alamat web Flutter bila nanti dideploy, mis. https://tim.github.io

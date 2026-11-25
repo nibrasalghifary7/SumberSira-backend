@@ -693,7 +693,7 @@ Pemetaan `transaction_status` Midtrans:
 
 ---
 
-## 13. AI Insight (P10)
+## 13. Insight (P10)
 
 > Analisis admin berbasis **aturan** (bukan LLM) melalui antarmuka `InsightGenerator`, sehingga bisa diganti layanan LLM sungguhan nanti tanpa mengubah endpoint.
 

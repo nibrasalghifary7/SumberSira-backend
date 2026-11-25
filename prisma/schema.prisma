@@ -210,6 +210,7 @@ model GalleryPhoto {
   storageKey String
   title      String
   owner      String
+  caption    String      @default("")
   ai         Boolean     @default(false)
   status     PhotoStatus @default(pending)
   createdAt  DateTime    @default(now())

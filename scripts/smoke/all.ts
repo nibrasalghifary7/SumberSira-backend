@@ -1,5 +1,5 @@
-/**
- * Menjalankan seluruh smoke test P0-P11 secara berurutan.
+﻿/**
+ * Menjalankan seluruh smoke test P0-P15 secara berurutan.
  * Berhenti pada kegagalan pertama dan mengembalikan exit code sesuai.
  *
  * Pemakaian: npx tsx scripts/smoke/all.ts  (atau: npm run smoke)

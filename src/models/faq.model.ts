@@ -3,6 +3,16 @@ import { z } from "zod";
 
 export const chatMessageSchema = z.object({
   message: z.string().trim().min(1).max(300),
+  // Beberapa pesan terakhir (opsional) supaya pertanyaan lanjutan seperti "kalau anak-anak?" dimengerti AI.
+  history: z
+    .array(z.object({ role: z.enum(["user", "assistant"]), text: z.string().max(600) }))
+    .max(8)
+    .optional(),
+});
+
+// Tombol jawaban cepat di aplikasi: 1 sampai 6 pertanyaan pendek.
+export const quickQuestionsSchema = z.object({
+  questions: z.array(z.string().trim().min(2).max(40)).min(1).max(6),
 });
 
 export const createFaqSchema = z.object({

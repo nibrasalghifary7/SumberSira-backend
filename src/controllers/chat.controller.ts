@@ -3,7 +3,10 @@ import { z } from "zod";
 import { db } from "../config/database.js";
 import { writeLimiter, publicLimiter } from "../utils/limiters.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
-import { chatMessageSchema, createFaqSchema, updateFaqSchema } from "../models/faq.model.js";
+import { chatMessageSchema, createFaqSchema, quickQuestionsSchema, updateFaqSchema } from "../models/faq.model.js";
+import { config } from "../config/index.js";
+import { aiAktif } from "../services/ai/client.js";
+import { batasChat, tanyaAsisten } from "../services/ai/chatbot.js";
 
 export const chatRouter = Router();
 export const adminFaqRouter = Router();
@@ -14,61 +17,106 @@ export const adminFaqRouter = Router();
 
 
 
-// POST /chat (Publik, pencocokan kata kunci FAQ aktif urut sortOrder)
+const TOMBOL_BAWAAN = ["Jam buka?", "Cara sewa ATV?", "Harga tiket?", "Parkir bus?"];
+
+// Tombol jawaban cepat yang diatur admin (Setting quickQuestions); bila belum diatur, pakai bawaan.
+async function bacaTombolCepat(): Promise<string[]> {
+  const setting = await db.setting.findUnique({ where: { key: "quickQuestions" } });
+  if (setting && Array.isArray(setting.value)) {
+    const daftar = setting.value.filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+    if (daftar.length) return daftar;
+  }
+  return TOMBOL_BAWAAN;
+}
+
+const JAWABAN_BELUM_TAHU = "Maaf, aku belum punya jawabannya. Pertanyaanmu sudah dicatat untuk admin ya.";
+
+// POST /chat (Publik)
+// 1) Tombol jawaban cepat (teks persis sama dengan tombol yang diatur admin) dijawab langsung dengan jawaban FAQ admin,
+//    tanpa AI: cepat, gratis, dan pasti sesuai yang ditulis admin.
+// 2) Pertanyaan lain dijawab AI yang hanya boleh memakai data resmi: harga, wahana, jam, keramaian, dan FAQ admin.
+//    Bila AI tidak tahu, pertanyaan dicatat ke daftar Belum Terjawab supaya admin bisa menambah FAQ.
+// 3) Tanpa AI (belum ada kunci, jatah harian habis, atau galat): cadangan pencocokan kata kunci FAQ seperti sebelumnya.
 chatRouter.post("/", writeLimiter, async (req, res) => {
   const parsed = chatMessageSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: "VALIDATION", issues: parsed.error.issues });
   }
 
-  const message = parsed.data.message.toLowerCase();
+  const pesan = parsed.data.message;
+  const pesanKecil = pesan.toLowerCase();
 
   // Ambil FAQ aktif urut sortOrder ascending
   const faqs = await db.faq.findMany({
     where: { active: true },
     orderBy: { sortOrder: "asc" },
   });
+  const jawabanFaq = faqs.find((faq) => faq.keys.some((key) => pesanKecil.includes(key.toLowerCase().trim())))?.answer ?? null;
 
-  let matchedAnswer: string | null = null;
-  for (const faq of faqs) {
-    const hasMatch = faq.keys.some((key) => message.includes(key.toLowerCase().trim()));
-    if (hasMatch) {
-      matchedAnswer = faq.answer;
-      break;
-    }
+  const tombol = await bacaTombolCepat();
+  const dariTombol = tombol.some((t) => t.trim().toLowerCase() === pesanKecil.trim());
+  if (dariTombol && jawabanFaq) {
+    return res.json({ answer: jawabanFaq, matched: true, source: "faq" });
   }
 
-  if (matchedAnswer) {
-    return res.json({
-      answer: matchedAnswer,
-      matched: true,
-    });
+  const ai = await tanyaAsisten(pesan, parsed.data.history ?? []);
+  if (ai) {
+    if (!ai.answered) await db.unansweredQuestion.create({ data: { question: pesan } });
+    return res.json({ answer: ai.answer, matched: ai.answered, source: "ai" });
+  }
+
+  if (jawabanFaq) {
+    return res.json({ answer: jawabanFaq, matched: true, source: "faq" });
   }
 
   // Jika tidak cocok, catat ke UnansweredQuestion
   await db.unansweredQuestion.create({
     data: {
-      question: parsed.data.message,
+      question: pesan,
     },
   });
 
   return res.json({
-    answer: "Maaf, aku belum punya jawabannya. Pertanyaanmu sudah dicatat untuk admin ya.",
+    answer: JAWABAN_BELUM_TAHU,
     matched: false,
+    source: "faq",
   });
 });
 
 // GET /chat/quick-questions (Publik)
 chatRouter.get("/quick-questions", publicLimiter, async (_req, res) => {
-  const setting = await db.setting.findUnique({
-    where: { key: "quickQuestions" },
-  });
+  return res.json(await bacaTombolCepat());
+});
 
-  if (setting && Array.isArray(setting.value)) {
-    return res.json(setting.value);
+// GET /admin/faq/quick-questions (Admin): tombol jawaban cepat yang tampil di aplikasi
+adminFaqRouter.get("/quick-questions", requireAuth, requireRole("admin"), async (_req, res) => {
+  res.json({ questions: await bacaTombolCepat() });
+});
+
+// PUT /admin/faq/quick-questions (Admin): tambah, kurangi, atau ubah tombol (1 sampai 6)
+adminFaqRouter.put("/quick-questions", requireAuth, requireRole("admin"), async (req, res) => {
+  const parsed = quickQuestionsSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "VALIDATION", issues: parsed.error.issues });
   }
+  // Buang duplikat tanpa memedulikan huruf besar-kecil
+  const unik = parsed.data.questions.filter((q, i, arr) => arr.findIndex((x) => x.toLowerCase() === q.toLowerCase()) === i);
+  await db.setting.upsert({
+    where: { key: "quickQuestions" },
+    update: { value: unik },
+    create: { key: "quickQuestions", value: unik },
+  });
+  res.json({ questions: unik });
+});
 
-  return res.json(["Jam buka?", "Cara sewa ATV?", "Harga tiket?", "Parkir bus?"]);
+// GET /admin/faq/ai-status (Admin): apakah chatbot AI aktif, dan berapa jatah hari ini terpakai
+adminFaqRouter.get("/ai-status", requireAuth, requireRole("admin"), (_req, res) => {
+  res.json({
+    enabled: aiAktif() && config.CHAT_AI_DAILY_LIMIT > 0,
+    model: config.CHAT_MODEL,
+    dailyLimit: config.CHAT_AI_DAILY_LIMIT,
+    usedToday: batasChat.terpakai(),
+  });
 });
 
 // GET /admin/faq (Admin, urut sortOrder)

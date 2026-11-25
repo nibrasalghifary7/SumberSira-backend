@@ -5,3 +5,8 @@ export const shareSchema = z.object({
   title: z.string().trim().min(1).max(60),
   owner: z.string().trim().min(1).max(40),
 });
+
+// Kekuatan perbaikan foto: 0 = foto asli, 100 = perbaikan penuh.
+export const strengthSchema = z.object({
+  strength: z.number().int().min(0).max(100),
+});
