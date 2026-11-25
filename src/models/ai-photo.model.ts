@@ -4,6 +4,8 @@ import { z } from "zod";
 export const shareSchema = z.object({
   title: z.string().trim().min(1).max(60),
   owner: z.string().trim().min(1).max(40),
+  // Keterangan foto, sama dengan unggahan galeri biasa (gallery.model.ts). Controller sudah meneruskannya ke database.
+  caption: z.string().trim().max(280).default(""),
 });
 
 // Kekuatan perbaikan foto: 0 = foto asli, 100 = perbaikan penuh.
