@@ -17,6 +17,10 @@ Ada yang ingin kamu ketahui seputar Sumber Sira? Yuk, tanyakan apa saja. Aku sia
 9. beranda: untuk yang foto-foto jelajahi kan ada shape persegi panjang beserta caption nya, nah aku mau warna nya itu dibalik mungkin yah, seperti yang ada di tentang sumber sira, jadi background caption nya itu yang bening
 10. di tentang sumber sira juga kalo aku scroll mentok ke bawah, tulisan atau info yang pembayaran nya itu tertutup button lanjut, jadi kasih space dikit aja supaya kalo mentok ke bawah semua info nya masih terlihat
 11. beranda: kasih logo nya donk di sebelah teks title paling awal Sumber Sira, disebelah kiri nya aja
+12. profil, tiket & booking, tentang sumber sira: di info parkir, saya mau icon nya menjadi P (rambu parkir) saja bisa? jadi jangan terpatok mobil
+13. beranda: saat muncul pertanyaan yang tidak terdapat pada kata kunci, ada tulisan 'tanya admin via whatsapp' nah fitur itu hapus aja, gausa di oper ke whatsapp
+14. beranda: saya mau ada keterangan Buka/Tutup berdasarkan jam kerja nya, mau taruh di samping kanan kapasitas terisi (dibawah data tulisan 300 orang)
+15. 
 
 B. ADMIN
 
